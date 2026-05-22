@@ -56,60 +56,66 @@ for (const c of chunks) {
 
 ## API
 
-| Export                                            | Description                                                       |
-| ------------------------------------------------- | ----------------------------------------------------------------- |
-| `toMarkdown(buf, opts?): string`                  | Convert a PDF buffer to a single Markdown string.                 |
-| `toMarkdownPages(buf, opts?): PageChunk[]`        | Convert to one chunk per page (`{ metadata, text, ... }`).        |
-| `IdentifyHeaders`                                 | Class that maps font sizes to `#…###` header levels.              |
-| `Rect`, `Point`                                   | Geometry helpers re-exported for advanced users.                  |
-| `MarkdownOptions`, `PageChunk`                    | TypeScript types.                                                 |
-
-`toJson` and `toText` exist as placeholders that throw — they require
-PyMuPDF's proprietary Layout mode which is not available in the WASM
-build.
+| Export                                            | Description                                                                |
+| ------------------------------------------------- | -------------------------------------------------------------------------- |
+| `toMarkdown(buf, opts?): string`                  | Convert a PDF buffer to a single Markdown string.                          |
+| `toMarkdownPages(buf, opts?): PageChunk[]`        | Convert to one chunk per page (`{ metadata, text, ... }`).                 |
+| `IdentifyHeaders`                                 | Class that maps font sizes to `#…###` header levels.                       |
+| `TocHeaders`                                      | Class that uses the document's TOC to assign header levels.                |
+| `getKeyValues(doc)`                               | Extract every PDF form field as `FormField[]` (name, value, type, bbox).   |
+| `ProgressBar`                                     | Minimal stderr progress wrapper, mirrors `pymupdf4llm.helpers.progress`.   |
+| `Rect`, `Point`                                   | Geometry helpers re-exported for advanced users.                           |
+| `MarkdownOptions`, `PageChunk`, `FormField`       | TypeScript types.                                                          |
 
 ## Options
 
 ```ts
 toMarkdown(buf, {
-  pages: [0, 1],         // 0-based page indices; default: all pages
-  margins: 0,            // number | [top, bottom] | [l, t, r, b]
-  ignoreCode: false,     // suppress ``` blocks for monospaced fonts
-  forceText: true,       // emit text on top of images
-  pageChunks: false,     // see toMarkdownPages
-  pageSeparators: false, // insert "--- end of page=N ---" between pages
+  pages: [0, 1],          // 0-based page indices; default: all pages
+  margins: 0,             // number | [top, bottom] | [l, t, r, b]
+  ignoreCode: false,      // suppress ``` blocks for monospaced fonts
+  forceText: true,        // emit text on top of images
+  pageChunks: false,      // see toMarkdownPages
+  pageSeparators: false,  // insert "--- end of page=N ---" between pages
   tableStrategy: "lines_strict", // or null to disable table detection
-  showProgress: false,   // log per-page progress to stderr
-  hdrInfo: undefined,    // pass false to skip header inference, or a custom IdentifyHeaders
-  filename: "",          // surfaced inside PageChunk.metadata.file_path
+  showProgress: false,    // render a progress bar on stderr
+  removeRotation: true,   // unrotate pages before processing (restored after)
+  hdrInfo: undefined,     // pass false to skip header inference, or a custom IdentifyHeaders / TocHeaders
+  filename: "",           // surfaced inside PageChunk.metadata.file_path
 });
 ```
 
-See `src/types.ts` for the full `MarkdownOptions` interface.
+See `src/helpers/types.ts` for the full `MarkdownOptions` interface.
 
 ## Parity & scope
 
 What matches `pymupdf4llm.to_markdown` byte-for-byte today:
 
 - single- and multi-column text layout (port of `multi_column.column_boxes`)
-- header levels via `IdentifyHeaders` (font-size frequency)
+- header levels via `IdentifyHeaders` (font-size frequency) and `TocHeaders` (document outline)
 - bullet lists (`startswith_bullet` semantics)
 - inline styling — bold, italic, monospaced/code, strikethrough — derived
   from MuPDF font properties
-- ruled tables detected via the `lines_strict` strategy (`tableFinder.ts`)
+- ruled tables detected via the `lines_strict` strategy
+- page rotation handling (`removeRotation` option, default `true`)
+- form-field extraction via `getKeyValues`
 
-Not yet implemented (raise an issue if you need any of these):
+Not available (and why):
 
-- `pymupdf.layout` features (`to_text`, `to_json`, layout-mode markdown)
-- OCR
-- image extraction and embedding (`write_images` / `embed_images`)
-- page rotation (`page.remove_rotation`)
-- `extract_words` / `page_chunks=true` with per-word coordinates
-- table strategies other than `lines_strict`
-- TOC-driven headers (`TocHeaders`)
+- **`pymupdf.layout` features** (`to_text`, `to_json`, layout-mode markdown)
+  — require Artifex's separate closed-source `pymupdf-layout` wheel
+  (an ONNX-based ML model under a Polyform Noncommercial license), which
+  has no JS distribution.
+- **OCR** — the official `mupdf` WASM bundle is built without
+  Tesseract/Leptonica (`"No OCR support in this build"`). See
+  `src/ocr/README.md` for a recipe using `tesseract.js`.
 
-For PDFs that depend on those features the port still produces sensible
-Markdown, but may diverge from the Python output.
+Planned for follow-up releases:
+
+- table strategies other than `lines_strict` (`lines`, `text`, `explicit`)
+- image extraction and embedding (`writeImages` / `embedImages`)
+- `extractWords` / per-word coordinates inside `PageChunk`
+- LlamaIndex adapter at `mupdf4llm/llama`
 
 ## How parity is enforced
 

@@ -1,10 +1,12 @@
 import * as mupdf from "mupdf";
-import { toMarkdown as ragToMarkdown } from "./rag";
-import type { MarkdownOptions, PageChunk } from "./types";
+import { toMarkdown as ragToMarkdown } from "./helpers/pymupdfRag";
+import type { MarkdownOptions, PageChunk } from "./helpers/types";
 
-export type { MarkdownOptions, PageChunk } from "./types";
-export { IdentifyHeaders } from "./identifyHeaders";
-export { Rect, Point } from "./geometry";
+export type { MarkdownOptions, PageChunk, FormField } from "./helpers/types";
+export { IdentifyHeaders, TocHeaders } from "./helpers/identifyHeaders";
+export { getKeyValues } from "./helpers/formFields";
+export { Rect, Point } from "./helpers/geometry";
+export { ProgressBar } from "./helpers/progress";
 
 /** Open a PDF from bytes and convert to markdown. */
 export function toMarkdown(buf: Uint8Array | ArrayBuffer, opts: MarkdownOptions = {}): string {
@@ -28,12 +30,4 @@ export function toMarkdownPages(buf: Uint8Array | ArrayBuffer, opts: MarkdownOpt
   } finally {
     doc.destroy();
   }
-}
-
-export function toJson(): never {
-  throw new Error("Function 'toJson' is only available in PyMuPDF-Layout mode");
-}
-
-export function toText(): never {
-  throw new Error("Function 'toText' is only available in PyMuPDF-Layout mode");
 }

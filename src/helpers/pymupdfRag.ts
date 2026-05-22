@@ -8,6 +8,8 @@ import { IdentifyHeaders, type HeaderIdProvider } from "./identifyHeaders";
 import { columnBoxes } from "./multiColumn";
 import { extractDrawings } from "./drawingDevice";
 import { findTables } from "./tableFinder";
+import { removeRotation, setPageRotation } from "./pageRotation";
+import { ProgressBar } from "./progress";
 import type { MarkdownOptions, PageContext, Span, LinkInfo, TableData } from "./types";
 
 interface PageParams {
@@ -288,6 +290,7 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
     pageSeparators = false,
     ignoreCode = false,
     showProgress = false,
+    removeRotation: shouldRemoveRotation = true,
   } = opts;
 
   if (!writeImages && !embedImages && !forceText) {
@@ -332,9 +335,13 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
     return m;
   })();
 
-  for (const pno of pages) {
-    if (showProgress) console.error(`Processing page ${pno + 1}/${pages.length}`);
+  const pageIter: Iterable<number> = showProgress
+    ? new ProgressBar(pages, { prefix: "pages " })
+    : pages;
+
+  for (const pno of pageIter) {
     const page = doc.loadPage(pno) as mupdf.PDFPage;
+    const prevRotation = shouldRemoveRotation ? removeRotation(doc, page) : 0;
     const rectBounds = page.getBounds();
     const pageRect = new Rect(rectBounds[0], rectBounds[1], rectBounds[2], rectBounds[3]);
     const [left, top, right, bottom] = margins;
@@ -434,6 +441,10 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
       });
     } else {
       document_output.push(parms.md_string);
+    }
+
+    if (shouldRemoveRotation && prevRotation !== 0) {
+      setPageRotation(doc, page, prevRotation);
     }
   }
 

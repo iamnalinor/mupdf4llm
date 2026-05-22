@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `TocHeaders` class — assigns header levels from the document outline,
+  mirroring `pymupdf4llm.helpers.pymupdf_rag.TocHeaders`.
+- `getKeyValues(doc)` — extracts every PDF form field as a `FormField[]`,
+  porting `pymupdf4llm.helpers.utils.get_key_values`.
+- `ProgressBar` — minimal stderr progress bar mirroring
+  `pymupdf4llm.helpers.progress.ProgressBar`. `showProgress: true` in
+  `MarkdownOptions` now renders a bar instead of a per-page log line.
+- `removeRotation` option (default `true`) — strips `/Rotate` from each
+  page before processing and restores it afterwards, matching
+  `page.remove_rotation()` behaviour in PyMuPDF.
+
+### Changed
+
+- **Restructured source layout** to mirror the upstream Python repo:
+  every module moved from `src/*.ts` into `src/helpers/*.ts`, and
+  `rag.ts` → `pymupdfRag.ts` (matches `pymupdf_rag.py`). New empty
+  folders `src/ocr/` and `src/llama/` reserved for future ports.
+
+### Removed
+
+- **`toJson` and `toText`** removed from the public API. They previously
+  threw — they require Artifex's closed-source `pymupdf-layout` wheel
+  (Polyform Noncommercial license, ONNX ML model) which has no JS
+  distribution and cannot legally be repackaged. See `src/ocr/README.md`
+  for the parallel story on OCR.
+
+### Planned
+
+- Table strategies `lines`, `text`, `explicit` (only `lines_strict`
+  today). This is the largest remaining parity gap — for tables without
+  full cell rules.
+- Image extraction & embedding (`writeImages` / `embedImages`).
+- Per-word coordinates (`extractWords`) in `PageChunk`.
+- LlamaIndex adapter at `mupdf4llm/llama` subpath export.
+
 ## [0.1.0] - 2026-05-22
 
 Initial release. TypeScript/Bun port of the classic

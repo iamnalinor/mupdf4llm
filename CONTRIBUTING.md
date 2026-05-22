@@ -26,24 +26,35 @@ bun run build        # emits dist/{index.js,index.cjs,index.d.ts}
 
 ## Project layout
 
+Mirrors the upstream Python `pymupdf4llm` repo (folders `helpers/`,
+`ocr/`, `llama/`) with camelCase filenames per TS convention.
+
 ```
 src/
-  index.ts            public API
-  rag.ts              main toMarkdown loop (pymupdf_rag.py)
-  textPage.ts         StructuredText → PyMuPDF-shaped blocks/lines/spans
-  getTextLines.ts     get_text_lines.py port
-  multiColumn.ts      multi_column.py port
-  identifyHeaders.ts  IdentifyHeaders class
-  drawingDevice.ts    custom mupdf.Device for paths and images
-  tableFinder.ts      lines_strict table detector
-  geometry.ts         Rect / Point with PyMuPDF-style operators
-  utils.ts            isWhite, bbox helpers, etc.
-  constants.ts        WHITE_CHARS, BULLETS, font flag bits
-  types.ts            TypeScript interfaces
+  index.ts              public API
+  helpers/
+    pymupdfRag.ts       main toMarkdown loop (pymupdf_rag.py)
+    textPage.ts         StructuredText → PyMuPDF-shaped blocks/lines/spans
+    getTextLines.ts     get_text_lines.py port
+    multiColumn.ts      multi_column.py port
+    identifyHeaders.ts  IdentifyHeaders + TocHeaders
+    drawingDevice.ts    custom mupdf.Device for paths and images
+    tableFinder.ts      lines_strict table detector
+    pageRotation.ts     /Rotate get/set; removeRotation()
+    formFields.ts       getKeyValues — port of utils.get_key_values
+    progress.ts         ProgressBar (progress.py)
+    geometry.ts         Rect / Point with PyMuPDF-style operators
+    utils.ts            isWhite, bbox helpers, etc.
+    constants.ts        WHITE_CHARS, BULLETS, font flag bits
+    types.ts            TypeScript interfaces
+  ocr/
+    README.md           why empty (no OCR in mupdf WASM)
+  llama/                reserved for LlamaIndex adapter
 tests/
-  parity.test.ts      bun:test — diffs TS output vs pymupdf4llm
+  parity.test.ts        bun:test — diffs TS output vs pymupdf4llm
+  fixtures/             real-world PDFs vendored for parity smoke tests
 scripts/
-  probe.ts / probe.py manual diff helpers
+  probe.ts / probe.py   manual diff helpers
 ```
 
 Every public function should keep parity with its Python counterpart;

@@ -69,6 +69,15 @@ export interface TableData {
   to_markdown(clean?: boolean): string;
 }
 
+export interface FormField {
+  page: number;
+  name: string;
+  label: string;
+  value: string;
+  type: "text" | "checkbox" | "radio" | "choice" | "signature" | "unknown";
+  bbox: BBox;
+}
+
 export interface MarkdownOptions {
   pages?: number[];
   hdrInfo?: { get_header_id(span: Span, page?: PageContext): string } | ((s: Span) => string) | false;
@@ -96,6 +105,7 @@ export interface MarkdownOptions {
   showProgress?: boolean;
   useGlyphs?: boolean;
   ignoreAlpha?: boolean;
+  removeRotation?: boolean;
 }
 
 export interface PageContext {
