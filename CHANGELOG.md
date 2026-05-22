@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Real-world parity fixtures** in `tests/fixtures/` (vendored from
+  [py-pdf/sample-files](https://github.com/py-pdf/sample-files), MIT)
+  exercising LaTeX ligatures, document outlines, AcroForm widgets,
+  multi-column layout, and page rotation. Tested in
+  `tests/realFixtures.test.ts` with three parity levels (`exact`,
+  `similar`, `smoke`).
 - `TocHeaders` class — assigns header levels from the document outline,
   mirroring `pymupdf4llm.helpers.pymupdf_rag.TocHeaders`.
 - `getKeyValues(doc)` — extracts every PDF form field as a `FormField[]`,
@@ -22,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Ligature decomposition** now matches PyMuPDF: `textPage.extractTextDict`
+  no longer passes `preserve-ligatures` to MuPDF's stext options by default
+  (`ﬁ` is decomposed to `fi`, etc.), matching `pymupdf.get_text("rawdict")`.
+  Pass `{ preserveLigatures: true }` to opt back in.
 - **Restructured source layout** to mirror the upstream Python repo:
   every module moved from `src/*.ts` into `src/helpers/*.ts`, and
   `rag.ts` → `pymupdfRag.ts` (matches `pymupdf_rag.py`). New empty
@@ -43,6 +53,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Image extraction & embedding (`writeImages` / `embedImages`).
 - Per-word coordinates (`extractWords`) in `PageChunk`.
 - LlamaIndex adapter at `mupdf4llm/llama` subpath export.
+
+### Known parity gaps
+
+Surfaced by the real-world fixtures in `tests/realFixtures.test.ts`:
+
+- **Span grouping** — our `charsToSpans` groups characters into spans by
+  (font, size, color), but libmupdf via PyMuPDF breaks more aggressively.
+  In LaTeX-produced PDFs this means an en-dash "–" embedded in body text
+  arrives as part of a longer span instead of as its own span; downstream,
+  pymupdf4llm's bullet-substitution rule (en-dash + space → "- ") never
+  fires, so our output keeps "–" where Python's has "-".
+- **Multi-column tables** — the late-page table in `multicolumn.pdf`
+  groups columns differently in TS vs Python.
+- **Cropped/rotated pages** — `cropped-rotated-scaled.pdf` produces ~10×
+  more output in TS than Python because our default `removeRotation: true`
+  unrotates the page before extraction; Python without that flag emits
+  only the un-rotated subset.
 
 ## [0.1.0] - 2026-05-22
 

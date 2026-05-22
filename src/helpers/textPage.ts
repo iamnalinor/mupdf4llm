@@ -125,9 +125,11 @@ export interface TextPageOpts {
 }
 
 function buildOptString(opts: TextPageOpts): string {
+  // Defaults match PyMuPDF's `page.get_text("rawdict")` — most notably
+  // ligatures are decomposed (ﬁ → fi) unless the caller opts in.
   const parts: string[] = [];
   if (opts.preserveImages !== false) parts.push("preserve-images");
-  if (opts.preserveLigatures !== false) parts.push("preserve-ligatures");
+  if (opts.preserveLigatures === true) parts.push("preserve-ligatures");
   if (opts.preserveWhitespace !== false) parts.push("preserve-whitespace");
   if (opts.collectStyles !== false) parts.push("collect-styles");
   if (opts.collectVectors) parts.push("collect-vectors");
