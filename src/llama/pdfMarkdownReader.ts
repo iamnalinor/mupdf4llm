@@ -6,9 +6,15 @@ import type { MarkdownOptions } from "../helpers/types";
 
 type MetaFilter = (m: Record<string, unknown>) => Record<string, unknown>;
 
-interface LlamaIndexDocumentLike {
+/**
+ * Returned record shape. With `llamaindex` installed each item is a real
+ * `Document` (same prototype as `import { Document } from "llamaindex"`);
+ * without it, a plain object with the same field name. Either way the
+ * metadata field is `metadata` — never `extra_info`.
+ */
+export interface LlamaIndexDocumentLike {
   text: string;
-  extra_info: Record<string, unknown>;
+  metadata: Record<string, unknown>;
 }
 
 /**
@@ -53,7 +59,7 @@ export class PDFMarkdownReader {
           hdrInfo: hdrInfo,
           pageChunks: false,
         }) as string;
-        out.push(Doc ? new Doc({ text, metadata: meta }) : { text, extra_info: meta });
+        out.push(Doc ? new Doc({ text, metadata: meta }) : { text, metadata: meta });
       }
       return out;
     } finally {

@@ -7,6 +7,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Rotation restore now lives in a `try/finally`** in
+  `pymupdfRag.toMarkdown`. Previously an exception inside page
+  processing (drawings, tables, image extraction, `writeText`) would
+  leave the document's `/Rotate` entry mutated.
+- **`columnBoxes` receives `avoid` + `noImageText` + `ignoreImages`**,
+  matching upstream `pymupdf_rag.py:1140`. Closes (or shrinks) the
+  multi-column-tables parity gap surfaced by `multicolumn.pdf`.
+- **`extractWords` resets `word` index per line** to match
+  `page.get_text("words")` in PyMuPDF (previously it was a single
+  per-page counter).
+- **`MarkdownOptions.fontsizeLimit` is now implemented** — drops
+  spans below the configured point size in
+  `text/getTextLines.sanitizeSpans`. Mirrors upstream `FONTSIZE_LIMIT`.
+
+### Changed
+
+- **Image markdown matches upstream**: emitted as `\n![](<ref>)\n`
+  with empty alt text (was `![image-N-I](<ref>)`). Mirrors
+  `pymupdf_rag.GRAPHICS_TEXT`.
+- **`PageChunk.images` carries real `width` / `height`** from the
+  detected image, not hardcoded zeros.
+- **`PageChunk.graphics` field removed.** It was always `[]` —
+  publishing a never-populated field broke the public contract. Will
+  return when we actually surface drawing-path data.
+- **`PageChunk.words` typed as `Word[]`** instead of `unknown[]`.
+- **LlamaIndex adapter returns one shape** — `{ text, metadata }` —
+  whether or not `llamaindex` is installed. Previously the
+  no-llamaindex fallback returned `{ text, extra_info }`, which lied
+  to consumers about the field name. `LlamaIndexDocumentLike` is
+  exported and reflects this.
+
+### Removed
+
+- **Seven `MarkdownOptions` knobs that were silently ignored**:
+  `ignoreImages`, `ignoreGraphics`, `detectBgColor`, `pageWidth`,
+  `pageHeight`, `graphicsLimit`, `useGlyphs`. Plus `pageChunks` as a
+  public option (use `toMarkdownPages` instead). They never affected
+  output — keeping them in the type was misleading.
+- **Strikethrough detection** removed from `writeText` and table cell
+  styling. `mupdf.js`'s `StructuredText.walk` doesn't expose
+  per-character flags or alpha, so `char_flags & FZ_STEXT_STRIKEOUT`
+  could never be true on this port. The README/CHANGELOG previously
+  advertised "strikethrough" — corrected.
+- Unused constant `CHAR_ITALIC = 0` (always false).
+
+### Tests / CI
+
+- `tests/parity.test.ts` and `tests/realFixtures.test.ts` skip
+  themselves (instead of erroring) when `python3 -c "import
+pymupdf4llm"` fails. JS-only contributors can run `bun test`
+  cleanly.
+- `requirements.txt` pinned to `pymupdf4llm==1.27.2.3` (the version
+  this port was validated against). CI now installs via
+  `pip install -r requirements.txt`.
+- `release.yml` runs `bun run lint:check` before tests, symmetric
+  with `ci.yml`.
+- New unit tests in `tests/units.test.ts`: `extractWords` per-line
+  index, `getKeyValues` shape, `fontsizeLimit` filter,
+  `PageChunk` shape, `PDFMarkdownReader` returned shape.
+
+### Documentation
+
+- README tightens the "byte-identical" claim — it's true on the
+  synthetic fixtures in `tests/parity.test.ts`, not globally.
+  Strikethrough removed from the inline-styling list.
+- `docs/guide/parity-and-limits.md` adds four new known-gaps
+  sections: strikethrough, invisible/OCR-layer text, cell styling
+  per-font vs per-char, image positioning at end of page vs inline.
+- `docs/guide/options.md` reflects the trimmed type and documents
+  `fontsizeLimit`.
+- `docs/guide/llamaindex.md` and `docs/guide/words-and-chunks.md`
+  updated to the new return shapes.
+
 ## [0.1.0] - 2026-05-22
 
 First release. TypeScript/Bun port of

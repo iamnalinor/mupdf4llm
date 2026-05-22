@@ -29,8 +29,9 @@ function quadToRect(q: number[]): Rect {
 const WHITESPACE = /\s/;
 
 /**
- * Extract every word from a page, grouped on whitespace boundaries. Ports the
- * `page.get_text("words")` extraction PyMuPDF uses for chunk-mode markdown.
+ * Extract every word from a page, grouped on whitespace boundaries. Mirrors
+ * `page.get_text("words")` in PyMuPDF: the `word` index resets per line, and
+ * `block` advances on every text block in document order.
  */
 export function extractWords(page: mupdf.Page): Word[] {
   const out: Word[] = [];
@@ -44,6 +45,7 @@ export function extractWords(page: mupdf.Page): Word[] {
 
   const flush = () => {
     if (curBox && curText) {
+      wordIdx++;
       out.push({
         x0: curBox.x0,
         y0: curBox.y0,
@@ -52,7 +54,7 @@ export function extractWords(page: mupdf.Page): Word[] {
         text: curText,
         block: blockIdx,
         line: lineIdx,
-        word: ++wordIdx,
+        word: wordIdx,
       });
     }
     curBox = null;
@@ -66,6 +68,7 @@ export function extractWords(page: mupdf.Page): Word[] {
     },
     beginLine() {
       lineIdx++;
+      wordIdx = -1; // per-line counter, matching get_text("words")
       flush();
     },
     endLine() {

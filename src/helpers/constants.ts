@@ -44,4 +44,3 @@ export const CHAR_SYNTHETIC = 4;
 export const CHAR_BOLD = 8;
 export const CHAR_FILLED = 16;
 export const CHAR_STROKED = 32;
-export const CHAR_ITALIC = 0; // not exposed in current FZ_STEXT_* enum; reserved

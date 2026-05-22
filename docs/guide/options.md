@@ -15,8 +15,11 @@ Every option on `MarkdownOptions`. Defaults match
 
 | Key              | Type      | Default | Notes                                                    |
 | ---------------- | --------- | ------- | -------------------------------------------------------- |
-| `pageChunks`     | `boolean` | `false` | Set internally by `toMarkdownPages`.                     |
 | `pageSeparators` | `boolean` | `false` | Insert `--- end of page=N ---` markers in joined output. |
+
+Use `toMarkdownPages` instead of `toMarkdown` when you want per-page
+chunks — the choice of return shape isn't an option, it's a separate
+entry point.
 
 ## Text and styling
 
@@ -56,15 +59,18 @@ Every option on `MarkdownOptions`. Defaults match
 | ---------------- | --------- | ------- | ------------------------------------------------- |
 | `removeRotation` | `boolean` | `true`  | Strip `/Rotate` before processing, restore after. |
 
+## Filtering
+
+| Key             | Type      | Default     | Notes                                                                                                                  |
+| --------------- | --------- | ----------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `fontsizeLimit` | `number`  | `undefined` | Skip spans whose font size is below this (in pt). Mirrors upstream `FONTSIZE_LIMIT`.                                   |
+| `ignoreAlpha`   | `boolean` | `false`     | Accept invisible text. **No-op today** — `mupdf.js` doesn't expose per-char alpha; field reserved for upstream parity. |
+
 ## Misc
 
-| Key             | Type             | Default     | Notes                                                     |
-| --------------- | ---------------- | ----------- | --------------------------------------------------------- |
-| `showProgress`  | `boolean`        | `false`     | Render `ProgressBar` to stderr while iterating pages.     |
-| `ignoreAlpha`   | `boolean`        | `false`     | Accept invisible / fully-transparent text.                |
-| `useGlyphs`     | `boolean`        | `true`      | Reserved — mirrors upstream's `small_glyph_heights` knob. |
-| `fontsizeLimit` | `number`         | `undefined` | Skip spans below this point size.                         |
-| `graphicsLimit` | `number \| null` | `null`      | Reserved — mirrors upstream's `graphics_limit`.           |
+| Key            | Type      | Default | Notes                                                 |
+| -------------- | --------- | ------- | ----------------------------------------------------- |
+| `showProgress` | `boolean` | `false` | Render `ProgressBar` to stderr while iterating pages. |
 
 For the canonical types, see
 [`src/helpers/types.ts`](https://github.com/iamnalinor/mupdf4llm/blob/main/src/helpers/types.ts).

@@ -14,7 +14,9 @@ npm i llamaindex
 ```
 
 If you don't, the reader still works — it returns plain
-`{ text, extra_info }` records with the same shape.
+`{ text, metadata }` records with the same field names as
+`Document`, so consumer code can read `.text` and `.metadata`
+without branching on whether `llamaindex` is installed.
 
 ## Usage
 

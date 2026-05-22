@@ -15,9 +15,8 @@ const chunks = toMarkdownPages(buf);
 //   toc_items: [level, title, page][],   // matching the page's TOC entries
 //   tables:    [{ bbox, rows, columns }],
 //   images:    [{ bbox, ref?, width, height, number }],
-//   graphics:  [],
 //   text:      string,                   // the markdown
-//   words:     Word[],                   // when extractWords: true
+//   words:     Word[],                   // when extractWords: true, else []
 // }
 ```
 

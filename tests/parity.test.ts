@@ -5,6 +5,21 @@ import { toMarkdown } from "../src/index";
 
 const FIXTURES = "/tmp/mupdf4llm-fixtures";
 
+/**
+ * Parity tests shell out to `python3 -c "import pymupdf4llm; ..."` to compare
+ * against the upstream reference. Skip everything if Python or pymupdf4llm
+ * isn't installed — this keeps `bun test` green for JS-only contributors.
+ */
+const HAS_PYMUPDF = (() => {
+  try {
+    execSync('python3 -c "import pymupdf4llm"', { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const testIf = HAS_PYMUPDF ? test : test.skip;
+
 function ensureFixtures() {
   if (existsSync(`${FIXTURES}/simple.pdf`)) return;
   mkdirSync(FIXTURES, { recursive: true });
@@ -69,7 +84,7 @@ function pyMarkdown(file: string): string {
 }
 
 for (const name of ["simple", "medium", "multi", "table"]) {
-  test(`parity: ${name}.pdf`, () => {
+  testIf(`parity: ${name}.pdf`, () => {
     ensureFixtures();
     const file = `${FIXTURES}/${name}.pdf`;
     const buf = readFileSync(file);

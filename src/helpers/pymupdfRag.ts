@@ -12,7 +12,7 @@ import { removeRotation, setPageRotation } from "./layout/pageRotation";
 import { ProgressBar } from "./progress";
 import { renderPageImage, dedupeImages } from "./images/imageExtract";
 import { extractWords } from "./text/extractWords";
-import type { MarkdownOptions, PageContext, Span, LinkInfo, TableData } from "./types";
+import type { MarkdownOptions, PageContext, PageChunk, Span, LinkInfo, TableData } from "./types";
 
 interface PageParams {
   page: mupdf.PDFPage;
@@ -30,6 +30,7 @@ interface PageParams {
   line_rects: Rect[];
   blocks: ReturnType<typeof extractTextDict>["blocks"];
   tabs: TableData[];
+  fontsizeLimit?: number;
 }
 
 function resolveLinks(links: LinkInfo[], span: Span): string | null {
@@ -86,6 +87,7 @@ function writeText(
       clip,
       tolerance: 3,
       ignoreInvisible: !parms.accept_invisible,
+      fontsizeLimit: parms.fontsizeLimit,
     },
   );
   nlines = nlines.filter((l) => outsideAllBboxes(l.rect, parms.tab_rects0));
@@ -132,7 +134,9 @@ function writeText(
       .join(" ")
       .trim();
 
-    const all_strikeout = spans.every((s) => s.char_flags & 1);
+    // Strikeout intentionally not detected: mupdf.js's walker doesn't expose
+    // per-char flags, so we can't read FZ_STEXT_STRIKEOUT. See docs/guide/
+    // parity-and-limits.md.
     const all_italic = spans.every((s) => s.flags & 2);
     const all_bold = spans.every((s) => s.flags & 16 || s.char_flags & 8);
     const all_mono = spans.every((s) => s.flags & 8);
@@ -144,7 +148,6 @@ function writeText(
       if (all_mono) text = "`" + text + "`";
       if (all_italic) text = "_" + text + "_";
       if (all_bold) text = "**" + text + "**";
-      if (all_strikeout) text = "~~" + text + "~~";
       if (hdr_string !== prev_hdr_string) {
         out += hdr_string + text + "\n";
       } else {
@@ -198,7 +201,6 @@ function writeText(
       const mono = s.flags & 8;
       const bold = s.flags & 16 || s.char_flags & 8;
       const italic = s.flags & 2;
-      const strikeout = s.char_flags & 1;
       let prefix = "";
       let suffix = "";
       if (mono) {
@@ -212,10 +214,6 @@ function writeText(
       if (italic) {
         prefix = "_" + prefix;
         suffix += "_";
-      }
-      if (strikeout) {
-        prefix = "~~" + prefix;
-        suffix += "~~";
       }
 
       const ltext = resolveLinks(parms.links, s);
@@ -313,7 +311,13 @@ function getToc(doc: mupdf.PDFDocument): [number, string, number][] {
   return out;
 }
 
-export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): string | unknown[] {
+/** Internal-only flag: callers from index.ts pick which entry point they need. */
+type RunMode = { pageChunks?: boolean };
+
+export function toMarkdown(
+  doc: mupdf.PDFDocument,
+  opts: MarkdownOptions & RunMode = {},
+): string | PageChunk[] {
   const {
     pages: pageList,
     writeImages = false,
@@ -323,6 +327,7 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
     pageSeparators = false,
     ignoreCode = false,
     showProgress = false,
+    fontsizeLimit,
     removeRotation: shouldRemoveRotation = true,
   } = opts;
 
@@ -358,7 +363,7 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
   };
 
   const document_output: string[] = [];
-  const chunk_output: unknown[] = [];
+  const chunk_output: PageChunk[] = [];
 
   const margins: [number, number, number, number] = (() => {
     const m = opts.margins;
@@ -375,152 +380,162 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
   for (const pno of pageIter) {
     const page = doc.loadPage(pno) as mupdf.PDFPage;
     const prevRotation = shouldRemoveRotation ? removeRotation(doc, page) : 0;
-    const rectBounds = page.getBounds();
-    const pageRect = new Rect(rectBounds[0], rectBounds[1], rectBounds[2], rectBounds[3]);
-    const [left, top, right, bottom] = margins;
-    const clip = new Rect(
-      pageRect.x0 + left,
-      pageRect.y0 + top,
-      pageRect.x1 - right,
-      pageRect.y1 - bottom,
-    );
+    try {
+      const rectBounds = page.getBounds();
+      const pageRect = new Rect(rectBounds[0], rectBounds[1], rectBounds[2], rectBounds[3]);
+      const [left, top, right, bottom] = margins;
+      const clip = new Rect(
+        pageRect.x0 + left,
+        pageRect.y0 + top,
+        pageRect.x1 - right,
+        pageRect.y1 - bottom,
+      );
 
-    const links = getLinks(page);
-    const td = extractTextDict(page, {});
+      const links = getLinks(page);
+      const td = extractTextDict(page, {});
 
-    // Drawings + images via custom Device (lines_strict tables + image regions)
-    let tabs: TableData[] = [];
-    const tab_rects = new Map<number, Rect>();
-    const tab_rects0: Rect[] = [];
-    const pageImages: { bbox: Rect; ref: string }[] = [];
-    if (opts.tableStrategy !== null || opts.writeImages || opts.embedImages) {
-      try {
-        const { paths, images } = extractDrawings(page);
-        if (opts.tableStrategy !== null) {
-          tabs = findTables(td.blocks, paths, clip, {
-            strategy: opts.tableStrategy ?? "lines_strict",
-            explicitGrid: opts.explicitTableGrids,
-          });
-          tabs.forEach((t, i) => {
-            const r = Rect.from(t.bbox).union(t.header.bbox);
-            tab_rects.set(i, r);
-            tab_rects0.push(r);
-          });
-        }
-        if (opts.writeImages || opts.embedImages) {
-          const deduped = dedupeImages(images);
-          deduped.forEach((img, i) => {
-            const rect = Rect.from(img.bbox as unknown as readonly number[]);
-            if (rect.isEmpty || !rect.isValid) return;
-            const ref = renderPageImage(page, pno, rect.intersect(clip), i, {
-              writeImages: opts.writeImages,
-              embedImages: opts.embedImages,
-              imagePath: opts.imagePath,
-              imageFormat: opts.imageFormat === "jpeg" ? "jpg" : opts.imageFormat,
-              dpi: opts.dpi,
-              imageSizeLimit: opts.imageSizeLimit,
-              filename,
+      // Drawings + images via custom Device (lines_strict tables + image regions)
+      let tabs: TableData[] = [];
+      const tab_rects = new Map<number, Rect>();
+      const tab_rects0: Rect[] = [];
+      const pageImages: { bbox: Rect; ref: string; width: number; height: number }[] = [];
+      if (opts.tableStrategy !== null || opts.writeImages || opts.embedImages) {
+        try {
+          const { paths, images } = extractDrawings(page);
+          if (opts.tableStrategy !== null) {
+            tabs = findTables(td.blocks, paths, clip, {
+              strategy: opts.tableStrategy ?? "lines_strict",
+              explicitGrid: opts.explicitTableGrids,
             });
-            if (ref) pageImages.push({ bbox: rect, ref });
-          });
+            tabs.forEach((t, i) => {
+              const r = Rect.from(t.bbox).union(t.header.bbox);
+              tab_rects.set(i, r);
+              tab_rects0.push(r);
+            });
+          }
+          if (opts.writeImages || opts.embedImages) {
+            const deduped = dedupeImages(images);
+            deduped.forEach((img, i) => {
+              const rect = Rect.from(img.bbox as unknown as readonly number[]);
+              if (rect.isEmpty || !rect.isValid) return;
+              const ref = renderPageImage(page, pno, rect.intersect(clip), i, {
+                writeImages: opts.writeImages,
+                embedImages: opts.embedImages,
+                imagePath: opts.imagePath,
+                imageFormat: opts.imageFormat === "jpeg" ? "jpg" : opts.imageFormat,
+                dpi: opts.dpi,
+                imageSizeLimit: opts.imageSizeLimit,
+                filename,
+              });
+              if (ref) {
+                pageImages.push({ bbox: rect, ref, width: img.width, height: img.height });
+              }
+            });
+          }
+        } catch (e) {
+          // tolerate per-page detection failures; surface only with DEBUG_MUPDF4LLM=1
+          if (process.env.DEBUG_MUPDF4LLM) console.error("[mupdf4llm] drawings/tables:", e);
         }
-      } catch {
-        // tolerate failures; tables/images remain empty
       }
-    }
 
-    const parms: PageParams = {
-      page,
-      pageNumber: pno,
-      filename,
-      md_string: "",
-      clip,
-      accept_invisible: opts.ignoreAlpha ?? false,
-      links,
-      tab_rects,
-      tab_rects0,
-      img_rects: pageImages.map((p) => p.bbox),
-      written_tables: new Set(),
-      written_images: new Set(),
-      line_rects: [],
-      blocks: td.blocks,
-      tabs,
-    };
+      const parms: PageParams = {
+        page,
+        pageNumber: pno,
+        filename,
+        md_string: "",
+        clip,
+        accept_invisible: opts.ignoreAlpha ?? false,
+        links,
+        tab_rects,
+        tab_rects0,
+        img_rects: pageImages.map((p) => p.bbox),
+        written_tables: new Set(),
+        written_images: new Set(),
+        line_rects: [],
+        blocks: td.blocks,
+        tabs,
+        fontsizeLimit,
+      };
 
-    const pageCtx: PageContext = { number: pno, rect: pageRect };
+      const pageCtx: PageContext = { number: pno, rect: pageRect };
 
-    // Determine text rectangles via columnBoxes
-    const text_rects = columnBoxes(td.blocks, {
-      clip,
-      footerMargin: margins[3],
-      headerMargin: margins[1],
-    });
-    const rects = text_rects.length ? text_rects : [clip];
-
-    for (const tr of rects) {
-      parms.md_string += writeText(parms, tr, getHeaderId, pageCtx, {
-        ignoreCode,
-        forceText,
-        tables: true,
-        images: true,
+      // Determine text rectangles via columnBoxes. avoid + noImageText mirror
+      // upstream pymupdf_rag.py:1140 (without these the multi-column heuristic
+      // doesn't know to skip table regions, and the early-page-of-spans pass
+      // doesn't suppress text on top of images).
+      const text_rects = columnBoxes(td.blocks, {
+        clip,
+        avoid: tab_rects0,
+        noImageText: !forceText,
+        ignoreImages: opts.writeImages || opts.embedImages,
+        footerMargin: margins[3],
+        headerMargin: margins[1],
       });
-    }
+      const rects = text_rects.length ? text_rects : [clip];
 
-    parms.md_string = parms.md_string.replace(/ ,/g, ",").replace(/-\n/g, "");
+      for (const tr of rects) {
+        parms.md_string += writeText(parms, tr, getHeaderId, pageCtx, {
+          ignoreCode,
+          forceText,
+          tables: true,
+          images: true,
+        });
+      }
 
-    // emit any remaining tables (those not picked up above a text block)
-    for (const [i, _r] of parms.tab_rects) {
-      if (parms.written_tables.has(i)) continue;
-      parms.md_string += parms.tabs[i]!.to_markdown(false) + "\n";
-      parms.written_tables.add(i);
-    }
+      parms.md_string = parms.md_string.replace(/ ,/g, ",").replace(/-\n/g, "");
 
-    // Emit images after text + tables. `ref` is either a relative file path
-    // (write_images) or a data: URL (embed_images); the alt text is the page
-    // number + image index for traceability.
-    for (let i = 0; i < pageImages.length; i++) {
-      const ref = pageImages[i]!.ref;
-      if (!ref) continue;
-      parms.md_string += `\n![image-${pno}-${i}](${ref})\n`;
-    }
+      // emit any remaining tables (those not picked up above a text block)
+      for (const [i] of parms.tab_rects) {
+        if (parms.written_tables.has(i)) continue;
+        parms.md_string += parms.tabs[i]!.to_markdown(false) + "\n";
+        parms.written_tables.add(i);
+      }
 
-    while (parms.md_string.startsWith("\n")) parms.md_string = parms.md_string.slice(1);
-    parms.md_string = parms.md_string.replaceAll("\x00", REPLACEMENT_CHARACTER);
+      // Emit images after text + tables. `ref` is either a relative file path
+      // (write_images) or a data: URL (embed_images). Alt text is empty to
+      // match upstream's `GRAPHICS_TEXT = "\n![](%s)\n"`.
+      for (const p of pageImages) {
+        if (!p.ref) continue;
+        parms.md_string += `\n![](${p.ref})\n`;
+      }
 
-    if (pageSeparators) {
-      parms.md_string += `\n\n--- end of page=${pno} ---\n\n`;
-    }
+      while (parms.md_string.startsWith("\n")) parms.md_string = parms.md_string.slice(1);
+      parms.md_string = parms.md_string.replaceAll("\x00", REPLACEMENT_CHARACTER);
 
-    if (pageChunks) {
-      const metadata = getMetadata(doc, filename, pno);
-      const toc = getToc(doc);
-      const page_tocs = toc.filter((t) => t[2] === pno + 1);
-      const words = opts.extractWords ? extractWords(page) : [];
-      chunk_output.push({
-        metadata,
-        toc_items: page_tocs,
-        tables: parms.tabs.map((t) => ({
-          bbox: t.bbox,
-          rows: t.row_count,
-          columns: t.col_count,
-        })),
-        images: pageImages.map((p, i) => ({
-          bbox: p.bbox,
-          width: 0,
-          height: 0,
-          number: i,
-          ref: p.ref,
-        })),
-        graphics: [],
-        text: parms.md_string,
-        words,
-      });
-    } else {
-      document_output.push(parms.md_string);
-    }
+      if (pageSeparators) {
+        parms.md_string += `\n\n--- end of page=${pno} ---\n\n`;
+      }
 
-    if (shouldRemoveRotation && prevRotation !== 0) {
-      setPageRotation(doc, page, prevRotation);
+      if (pageChunks) {
+        const metadata = getMetadata(doc, filename, pno);
+        const toc = getToc(doc);
+        const page_tocs = toc.filter((t) => t[2] === pno + 1);
+        const words = opts.extractWords ? extractWords(page) : [];
+        chunk_output.push({
+          metadata,
+          toc_items: page_tocs,
+          tables: parms.tabs.map((t) => ({
+            bbox: t.bbox,
+            rows: t.row_count,
+            columns: t.col_count,
+          })),
+          images: pageImages.map((p, i) => ({
+            bbox: p.bbox,
+            width: p.width,
+            height: p.height,
+            number: i,
+            ref: p.ref,
+          })),
+          text: parms.md_string,
+          words,
+        });
+      } else {
+        document_output.push(parms.md_string);
+      }
+    } finally {
+      if (shouldRemoveRotation && prevRotation !== 0) {
+        setPageRotation(doc, page, prevRotation);
+      }
     }
   }
 

@@ -3,6 +3,16 @@ import { readFileSync, existsSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { toMarkdown } from "../src/index";
 
+const HAS_PYMUPDF = (() => {
+  try {
+    execSync('python3 -c "import pymupdf4llm"', { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const testIf = HAS_PYMUPDF ? test : test.skip;
+
 /**
  * Real-world PDF parity. Fixtures are vendored from
  * https://github.com/py-pdf/sample-files (MIT-licensed) — they cover
@@ -60,26 +70,33 @@ function pyMarkdown(file: string): string {
 
 for (const f of FIXTURES) {
   const path = `tests/fixtures/${f.name}`;
-  test(`real: ${f.name} (${f.mode})`, () => {
-    if (!existsSync(path)) {
-      throw new Error(`missing fixture ${path}`);
-    }
-    const buf = readFileSync(path);
-    const ts = toMarkdown(buf);
-    expect(ts.length).toBeGreaterThan(0);
+  // Smoke = TS-only sanity check, run regardless of Python.
+  // exact / similar = compare against pymupdf4llm, skip when Python missing.
+  const runner = f.mode === "smoke" ? test : testIf;
+  runner(
+    `real: ${f.name} (${f.mode})`,
+    () => {
+      if (!existsSync(path)) {
+        throw new Error(`missing fixture ${path}`);
+      }
+      const buf = readFileSync(path);
+      const ts = toMarkdown(buf);
+      expect(ts.length).toBeGreaterThan(0);
 
-    if (f.mode === "smoke") return;
+      if (f.mode === "smoke") return;
 
-    const py = pyMarkdown(path);
-    if (f.mode === "exact") {
-      expect(ts).toBe(py);
-      return;
-    }
+      const py = pyMarkdown(path);
+      if (f.mode === "exact") {
+        expect(ts).toBe(py);
+        return;
+      }
 
-    // "similar": length within ±5%, both non-empty
-    expect(py.length).toBeGreaterThan(0);
-    const ratio = ts.length / py.length;
-    expect(ratio).toBeGreaterThan(0.95);
-    expect(ratio).toBeLessThan(1.05);
-  }, 30_000);
+      // "similar": length within ±5%, both non-empty
+      expect(py.length).toBeGreaterThan(0);
+      const ratio = ts.length / py.length;
+      expect(ratio).toBeGreaterThan(0.95);
+      expect(ratio).toBeLessThan(1.05);
+    },
+    30_000,
+  );
 }

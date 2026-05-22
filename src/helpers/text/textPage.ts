@@ -37,7 +37,11 @@ function fontFlags(font: mupdf.Font): number {
 }
 
 function fontCharFlags(font: mupdf.Font): number {
-  // We treat every char as "filled" by default (FZ_STEXT_FILLED = 16).
+  // mupdf.js's StructuredText walker exposes (c, origin, font, size, quad, color)
+  // — there's no per-character flags channel, so we synthesize the bits we can
+  // infer at font granularity. Strikeout would require per-char data we don't
+  // have, so CHAR_STRIKEOUT is never set on this port; see docs/guide/parity-
+  // and-limits.md.
   let f = CHAR_FILLED;
   if (font.isBold()) f |= CHAR_BOLD;
   return f;
@@ -108,6 +112,9 @@ function buildSpan(chars: CharData[]): Span {
     color: packColor(first.color),
     flags: fontFlags(first.font),
     char_flags: fontCharFlags(first.font),
+    // mupdf.js's walker doesn't expose per-char alpha; hardcoded to fully
+    // opaque so downstream invisible-text filters are effectively a no-op
+    // until upstream surfaces alpha.
     alpha: 255,
     ascender: 0.8,
     descender: -0.2,

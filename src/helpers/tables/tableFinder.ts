@@ -1,7 +1,7 @@
 import { Rect, type BBox } from "../geometry";
 import type { Block, TableData, DrawingPath, Span } from "../types";
 import { areDisjoint } from "../utils";
-import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD, CHAR_STRIKEOUT } from "../constants";
+import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD } from "../constants";
 
 export type TableStrategy = "lines_strict" | "lines" | "text" | "explicit";
 
@@ -145,14 +145,12 @@ function spanStyling(spans: Span[]): {
   bold: boolean;
   italic: boolean;
   mono: boolean;
-  strike: boolean;
 } {
-  if (!spans.length) return { bold: false, italic: false, mono: false, strike: false };
+  if (!spans.length) return { bold: false, italic: false, mono: false };
   const bold = spans.every((s) => s.flags & FLAG_BOLD || s.char_flags & CHAR_BOLD);
   const italic = spans.every((s) => s.flags & FLAG_ITALIC);
   const mono = spans.every((s) => s.flags & FLAG_MONOSPACED);
-  const strike = spans.every((s) => s.char_flags & CHAR_STRIKEOUT);
-  return { bold, italic, mono, strike };
+  return { bold, italic, mono };
 }
 
 /** Extract markdown-styled text from a rect. */
@@ -173,13 +171,9 @@ function extractCellText(blocks: Block[], cell: Rect, markdown: boolean): string
           continue;
         }
         st = st.length > 2 ? st.replace(/\s+$/, "") : st;
-        const { bold, italic, mono, strike } = spanStyling([span]);
+        const { bold, italic, mono } = spanStyling([span]);
         let prefix = "",
           suffix = "";
-        if (strike) {
-          prefix = "~~" + prefix;
-          suffix = "~~" + suffix;
-        }
         if (bold) {
           prefix = "**" + prefix;
           suffix = "**" + suffix;

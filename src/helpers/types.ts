@@ -1,4 +1,5 @@
 import type { Rect, BBox } from "./geometry";
+import type { Word } from "./text/extractWords";
 
 export interface Span {
   bbox: Rect;
@@ -88,29 +89,23 @@ export interface MarkdownOptions {
     | false;
   writeImages?: boolean;
   embedImages?: boolean;
-  ignoreImages?: boolean;
-  ignoreGraphics?: boolean;
-  detectBgColor?: boolean;
   imagePath?: string;
-  imageFormat?: "png" | "jpeg";
+  imageFormat?: "png" | "jpg" | "jpeg";
   imageSizeLimit?: number;
   filename?: string | null;
   forceText?: boolean;
-  pageChunks?: boolean;
   pageSeparators?: boolean;
   margins?: number | [number, number] | [number, number, number, number];
   dpi?: number;
-  pageWidth?: number;
-  pageHeight?: number;
   tableStrategy?: "lines_strict" | "lines" | "text" | "explicit" | null;
   /** Explicit grid coordinates for `tableStrategy: "explicit"`. */
   explicitTableGrids?: { hLines: number[]; vLines: number[] }[];
-  graphicsLimit?: number | null;
+  /** Skip spans whose font size is below this threshold (in pt). Mirrors upstream FONTSIZE_LIMIT. */
   fontsizeLimit?: number;
   ignoreCode?: boolean;
   extractWords?: boolean;
   showProgress?: boolean;
-  useGlyphs?: boolean;
+  /** Accept invisible (alpha=0) text. Currently a no-op — mupdf.js's walker does not expose alpha. */
   ignoreAlpha?: boolean;
   removeRotation?: boolean;
 }
@@ -125,7 +120,7 @@ export interface PageChunk {
   toc_items: [number, string, number][];
   tables: { bbox: BBox; rows: number; columns: number }[];
   images: ImageInfo[];
-  graphics: DrawingPath[];
   text: string;
-  words: unknown[];
+  /** Populated when MarkdownOptions.extractWords is true. */
+  words: Word[];
 }

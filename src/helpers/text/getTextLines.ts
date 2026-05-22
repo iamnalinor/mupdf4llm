@@ -37,13 +37,20 @@ export interface GetRawLinesOpts {
   tolerance?: number;
   ignoreInvisible?: boolean;
   onlyHorizontal?: boolean;
+  /** Drop spans whose font size is below this threshold (in pt). */
+  fontsizeLimit?: number;
 }
 
 export function getRawLines(td: TextDict | undefined, opts: GetRawLinesOpts = {}): RawLine[] {
   const blocks = opts.blocks ?? td?.blocks ?? [];
   const tolerance = opts.tolerance ?? 3;
   const onlyHorizontal = opts.onlyHorizontal !== false;
-  const ignoreInvisible = opts.ignoreInvisible !== false;
+  // NOTE: ignoreInvisible would gate on span.alpha but mupdf.js's StructuredText
+  // walker doesn't expose per-char alpha; the field is hardcoded to 255 in
+  // textPage.ts so this branch is unreachable today. Kept for upstream parity
+  // when/if mupdf.js surfaces alpha.
+  const _ignoreInvisible = opts.ignoreInvisible !== false;
+  const fontsizeLimit = opts.fontsizeLimit;
   const clip = opts.clip;
 
   const spans: Span[] = [];
@@ -60,7 +67,8 @@ export function getRawLines(td: TextDict | undefined, opts: GetRawLinesOpts = {}
       for (let sno = 0; sno < line.spans.length; sno++) {
         const s = line.spans[sno]!;
         if (isWhite(s.text)) continue;
-        if (!s.font.startsWith(TYPE3_FONT_NAME) && s.alpha === 0 && ignoreInvisible) {
+        if (fontsizeLimit !== undefined && s.size < fontsizeLimit) continue;
+        if (!s.font.startsWith(TYPE3_FONT_NAME) && s.alpha === 0 && _ignoreInvisible) {
           continue;
         }
         if (clip && !almostInBbox(s.bbox, clip)) continue;
