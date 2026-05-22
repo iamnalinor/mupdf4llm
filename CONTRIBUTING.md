@@ -120,29 +120,60 @@ Documentation is built with [VitePress](https://vitepress.dev/) +
 
 ## Releasing to npm
 
-One-time setup:
+`release.yml` uses [Trusted Publishing](https://docs.npmjs.com/trusted-publishers)
+— GitHub Actions authenticates to npm over OIDC, no long-lived
+`NPM_TOKEN` is involved. The package must exist on npm and have
+GitHub Actions configured as a trusted publisher before any automated
+release can succeed.
 
-1. `npm login` from your machine, or generate an npm
-   [Automation Token](https://docs.npmjs.com/creating-and-viewing-access-tokens)
-   and add it as the `NPM_TOKEN` repository secret on GitHub.
-2. On npmjs.com, open the package's settings and enable
-   [provenance](https://docs.npmjs.com/generating-provenance-statements)
-   for OIDC trust with GitHub Actions.
+### One-time setup
 
-Per release:
+1. **Bootstrap the package on npm.** Trusted Publishing can only be
+   attached to a package that already exists, so the very first
+   publish is done locally:
+
+   ```sh
+   npm login                       # interactive 2FA via browser
+   bun run build
+   npm publish --access public     # no --provenance — local box has no OIDC
+   ```
+
+2. **Wire up Trusted Publishing.** On npmjs.com → the package's page →
+   **Settings → Publishing access → Trusted publishers → Add trusted
+   publisher → GitHub Actions**, and fill in:
+   - Organization or user: `iamnalinor`
+   - Repository: `mupdf4llm`
+   - Workflow filename: `release.yml`
+   - Environment name: _(leave empty unless you also add a GitHub
+     Environment with required reviewers — see below)_
+
+3. _(Optional)_ If you want a manual approval gate before each
+   publish, create a GitHub Environment named `npm-publish` with
+   protection rules and add `environment: npm-publish` to the
+   `publish` job in `release.yml`. The npm trusted-publisher
+   configuration must list the same environment name.
+
+### Per release
 
 ```sh
-npm version patch        # or minor / major — commits + creates a tag
+npm version patch          # or minor / major — commits + creates a tag
 git push && git push --tags
 ```
 
-The `v*.*.*` tag triggers `.github/workflows/release.yml`, which runs
-typecheck + tests + build and then `npm publish --provenance --access public`
-with `NODE_AUTH_TOKEN` set from `NPM_TOKEN`.
+The `v*.*.*` tag triggers `.github/workflows/release.yml`, which:
 
-If the publish step is skipped (e.g. the secret isn't set yet), the
-build artifacts are still produced; you can run `npm publish` manually
-from a local checkout after `bun run build`.
+1. Installs Bun, Node 24+ (for npm 11), and Python 3.11.
+2. Upgrades npm globally to the latest (Trusted Publishing needs
+   ≥ 11.5.1).
+3. Runs `bun run lint:check && bun test && bun run build`.
+4. Calls `npm publish --provenance --access public`. The npm CLI
+   detects the OIDC token from GitHub Actions automatically — no env
+   variables to set.
+
+If the workflow fails at the publish step with an OIDC error, the
+most common cause is the trusted-publisher row on npmjs.com not
+matching the GitHub repository / workflow filename / environment.
+Re-check those fields verbatim.
 
 ## License
 

@@ -146,7 +146,9 @@ docs/                           VitePress + TypeDoc documentation site
   ships only `dist/`, README, CHANGELOG, LICENSE.
 - `prepublishOnly` runs typecheck + tests + build.
 - `npm publish --provenance --access public` on `v*.*.*` tags via
-  `.github/workflows/release.yml`.
+  `.github/workflows/release.yml`, authenticated through
+  [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers)
+  (OIDC, no long-lived `NPM_TOKEN` secret).
 - AGPL-3.0-or-later, inherited from PyMuPDF / pymupdf4llm.
 
 ### Tooling
