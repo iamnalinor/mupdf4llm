@@ -4,10 +4,11 @@
 
 Prerequisites:
 
-- [Bun](https://bun.sh) ≥ 1.0
+- [Bun](https://bun.sh) ≥ 1.0 (also works on Node ≥ 20, but the test
+  runner uses `bun:test`)
 - Python 3.10+ with `pymupdf4llm` installed
-  (`pip install pymupdf4llm`) — the parity tests spawn it to compare
-  byte-for-byte output.
+  (`pip install pymupdf4llm`) — the parity tests spawn `python3 -c "..."`
+  to compare byte-for-byte output
 
 Setup:
 
@@ -16,50 +17,106 @@ bun install
 pip install pymupdf4llm
 ```
 
-Loop:
+Inner loop:
 
 ```sh
-bun run typecheck    # tsc --noEmit
-bun test             # bun:test, runs tests/parity.test.ts
-bun run build        # emits dist/{index.js,index.cjs,index.d.ts}
+bun test               # 15 tests across parity, real fixtures, units
+bun run lint           # prettier --write . && eslint . && tsc --noEmit
+bun run lint:check     # CI-style — fails on style drift instead of fixing it
+bun run build          # emits dist/{index,llama}.{js,cjs,d.ts}
+```
+
+Docs:
+
+```sh
+bun run docs:dev       # hot-reload preview at http://localhost:5173
+bun run docs:build     # static build to docs/.vitepress/dist
+bun run docs:api       # regenerate docs/reference/api/ from TS types
 ```
 
 ## Project layout
 
-Mirrors the upstream Python `pymupdf4llm` repo (folders `helpers/`,
-`ocr/`, `llama/`) with camelCase filenames per TS convention.
-
 ```
 src/
-  index.ts              public API
+  index.ts                  public API entry point
   helpers/
-    pymupdfRag.ts       main toMarkdown loop (pymupdf_rag.py)
-    textPage.ts         StructuredText → PyMuPDF-shaped blocks/lines/spans
-    getTextLines.ts     get_text_lines.py port
-    multiColumn.ts      multi_column.py port
-    identifyHeaders.ts  IdentifyHeaders + TocHeaders
-    drawingDevice.ts    custom mupdf.Device for paths and images
-    tableFinder.ts      lines_strict table detector
-    pageRotation.ts     /Rotate get/set; removeRotation()
-    formFields.ts       getKeyValues — port of utils.get_key_values
-    progress.ts         ProgressBar (progress.py)
-    geometry.ts         Rect / Point with PyMuPDF-style operators
-    utils.ts            isWhite, bbox helpers, etc.
-    constants.ts        WHITE_CHARS, BULLETS, font flag bits
-    types.ts            TypeScript interfaces
+    pymupdfRag.ts           main toMarkdown orchestrator (pymupdf_rag.py)
+    types.ts                shared TS interfaces
+    constants.ts            WHITE_CHARS, BULLETS, font flag bits
+    geometry.ts             Rect / Point primitives
+    utils.ts                isWhite, bbox helpers, reading-order helpers
+    progress.ts             ProgressBar
+    text/                   text-stream extraction
+      textPage.ts           StructuredText → blocks/lines/spans
+      getTextLines.ts       get_text_lines.py port
+      extractWords.ts       per-word coordinates
+      identifyHeaders.ts    IdentifyHeaders + TocHeaders
+    tables/                 table detection
+      tableFinder.ts        4 strategies (lines_strict / lines / text / explicit)
+      drawingDevice.ts      custom mupdf.Device used by tables and images
+    layout/                 page-level layout
+      multiColumn.ts        column box detection
+      pageRotation.ts       /Rotate get / set / remove
+    images/
+      imageExtract.ts       renderPageImage + dedupeImages
+    forms/
+      formFields.ts         getKeyValues — port of utils.get_key_values
+  llama/
+    pdfMarkdownReader.ts    LlamaIndex adapter (mupdf4llm/llama subpath)
   ocr/
-    README.md           why empty (no OCR in mupdf WASM)
-  llama/                reserved for LlamaIndex adapter
+    README.md               why no OCR + tesseract.js recipe
 tests/
-  parity.test.ts        bun:test — diffs TS output vs pymupdf4llm
-  fixtures/             real-world PDFs vendored for parity smoke tests
+  parity.test.ts            synthetic PyMuPDF-generated fixtures, exact parity
+  realFixtures.test.ts      real PDFs from py-pdf/sample-files, tiered parity
+  units.test.ts             unit tests for utils, geometry, progress, headers
+  fixtures/                 vendored real-world PDFs (MIT)
+docs/                       VitePress + TypeDoc documentation site
 scripts/
-  probe.ts / probe.py   manual diff helpers
+  probe.ts / probe.py       manual diff helpers
 ```
 
 Every public function should keep parity with its Python counterpart;
-when in doubt, add a fixture in `tests/parity.test.ts` that regenerates
-on first run and asserts strict equality with `pymupdf4llm.to_markdown`.
+when in doubt, add a fixture in `tests/parity.test.ts` (synthetic) or
+`tests/realFixtures.test.ts` (vendored) and assert strict equality
+against `pymupdf4llm.to_markdown`.
+
+## Adding a feature
+
+1. Write the implementation under the appropriate `src/helpers/`
+   subdirectory (or add a new one if it doesn't fit existing
+   concerns). Keep the file focused — a single feature per module.
+2. Export the public surface via `src/index.ts`.
+3. Add a unit test in `tests/units.test.ts` if it's small and pure.
+   Add a parity fixture in `tests/parity.test.ts` if it touches the
+   markdown rendering path and you want byte-for-byte parity.
+4. Update the relevant guide page under `docs/guide/` (or add one).
+5. Run `bun run lint` to format, `bun test` to verify, `bun run docs:build`
+   to confirm the docs site still builds.
+
+## Documentation
+
+Documentation is built with [VitePress](https://vitepress.dev/) +
+[`typedoc-plugin-markdown`](https://typedoc-plugin-markdown.org/).
+
+- Hand-written guides live in `docs/guide/`, examples in
+  `docs/examples/`, and the landing page is `docs/index.md`.
+- The API reference under `docs/reference/api/` is auto-generated from
+  `src/` by TypeDoc (configured in `typedoc.json`) and gitignored.
+  Regenerate with `bun run docs:api`.
+- The deploy workflow `.github/workflows/docs.yml` ships the static
+  bundle to GitHub Pages on push to main. The repo's
+  **Settings → Pages → Source** must be set to **GitHub Actions** once.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every push and PR. Steps:
+
+1. `bun install --frozen-lockfile`
+2. `bun run lint:check` — Prettier + ESLint + tsc
+3. `bun run docs:build` — smoke-test the docs site
+4. `bun test` — 15 tests
+5. `bun run build` — emit dist artifacts
+6. `npm pack --dry-run` — verify the published tarball
 
 ## Releasing to npm
 
@@ -75,18 +132,13 @@ One-time setup:
 Per release:
 
 ```sh
-# bump version (commit + tag)
-npm version patch        # or minor / major
-
-# push branch and tag
+npm version patch        # or minor / major — commits + creates a tag
 git push && git push --tags
 ```
 
-The tag (`v*.*.*`) triggers `.github/workflows/release.yml`, which:
-
-1. Runs `bun run typecheck && bun test && bun run build`.
-2. Runs `npm publish --provenance --access public` with `NODE_AUTH_TOKEN`
-   set from `NPM_TOKEN`.
+The `v*.*.*` tag triggers `.github/workflows/release.yml`, which runs
+typecheck + tests + build and then `npm publish --provenance --access public`
+with `NODE_AUTH_TOKEN` set from `NPM_TOKEN`.
 
 If the publish step is skipped (e.g. the secret isn't set yet), the
 build artifacts are still produced; you can run `npm publish` manually

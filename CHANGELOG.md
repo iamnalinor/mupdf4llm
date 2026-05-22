@@ -7,122 +7,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+## [0.1.0] - 2026-05-22
 
-- **Image extraction** — `writeImages` saves each detected image region to
-  disk under `imagePath` (filename `<filename>-<page>-<index>.<ext>`);
-  `embedImages` inlines them as base64 `data:` URIs in the markdown.
-  Ports `pymupdf4llm.helpers.pymupdf_rag.to_markdown`'s `write_images` /
-  `embed_images` switches plus the `image_format`, `image_path`, `dpi`,
-  `image_size_limit` options. New module: `src/helpers/imageExtract.ts`.
-- **Per-word extraction** — `extractWords(page)` returns
-  `{ x0, y0, x1, y1, text, block, line, word }[]` (mirrors
-  `page.get_text("words")`). `MarkdownOptions.extractWords: true` makes
-  `toMarkdownPages` emit the array on each `PageChunk.words`. New module:
-  `src/helpers/extractWords.ts`.
-- **All four `tableStrategy` modes** — `lines_strict` (existing),
-  `lines` (more tolerant edge-detection), `text` (text-alignment-only
-  clustering), `explicit` (caller-supplied row/col coordinates via
-  `explicitTableGrids`). `tableFinder.findTables` now takes an `opts`
-  object with `{ strategy, explicitGrid }`.
-- **Reading-order helpers** — `clusterStripes(rects, tolerance?)` and
-  `computeReadingOrder(rects, tolerance?)` (port subset of
-  `pymupdf4llm.helpers.utils`).
-- **LlamaIndex adapter** at the `mupdf4llm/llama` subpath export. Ports
-  `pymupdf4llm.llama.PDFMarkdownReader` — `loadData(filePath, extra?)`
-  returns one `Document` (or plain `{ text, extra_info }` if
-  `llamaindex` isn't installed) per page. `llamaindex` is declared as
-  an optional peer dependency in `package.json`.
-- **Linter pipeline** — Prettier (write mode) + ESLint v10 (flat config,
-  TypeScript-aware) + `tsc --noEmit`, runnable as `bun lint` (writes)
-  and `bun lint:check` (CI-style).
-- **Unit tests** in `tests/units.test.ts` for the smaller modules
-  (`utils`, `geometry`, `progress`, `IdentifyHeaders`, `TocHeaders`).
-- **Real-world parity fixtures** in `tests/fixtures/` (vendored from
-  [py-pdf/sample-files](https://github.com/py-pdf/sample-files), MIT)
-  exercising LaTeX ligatures, document outlines, AcroForm widgets,
-  multi-column layout, and page rotation. Tested in
-  `tests/realFixtures.test.ts` with three parity levels (`exact`,
-  `similar`, `smoke`).
-- `TocHeaders` class — assigns header levels from the document outline,
-  mirroring `pymupdf4llm.helpers.pymupdf_rag.TocHeaders`.
-- `getKeyValues(doc)` — extracts every PDF form field as a `FormField[]`,
-  porting `pymupdf4llm.helpers.utils.get_key_values`.
-- `ProgressBar` — minimal stderr progress bar mirroring
-  `pymupdf4llm.helpers.progress.ProgressBar`. `showProgress: true` in
-  `MarkdownOptions` now renders a bar instead of a per-page log line.
-- `removeRotation` option (default `true`) — strips `/Rotate` from each
-  page before processing and restores it afterwards, matching
-  `page.remove_rotation()` behaviour in PyMuPDF.
+First release. TypeScript/Bun port of
+[`pymupdf4llm`](https://github.com/pymupdf/RAG)'s classic
+(non-layout) backend on top of the official `mupdf` WASM package.
 
-### Changed
+### Core API
 
-- **Ligature decomposition** now matches PyMuPDF: `textPage.extractTextDict`
-  no longer passes `preserve-ligatures` to MuPDF's stext options by default
-  (`ﬁ` is decomposed to `fi`, etc.), matching `pymupdf.get_text("rawdict")`.
-  Pass `{ preserveLigatures: true }` to opt back in.
-- **Restructured source layout** to mirror the upstream Python repo:
-  every module moved from `src/*.ts` into `src/helpers/*.ts`, and
-  `rag.ts` → `pymupdfRag.ts` (matches `pymupdf_rag.py`). New empty
-  folders `src/ocr/` and `src/llama/` reserved for future ports.
+- `toMarkdown(buf, opts?): string` — convert a PDF buffer to a single
+  Markdown string.
+- `toMarkdownPages(buf, opts?): PageChunk[]` — convert to one chunk per
+  page, each with `{ metadata, toc_items, text, tables, images, words, ... }`.
+- `IdentifyHeaders` — font-size-based header inference.
+- `TocHeaders` — outline-based header inference.
+- `getKeyValues(doc)` — AcroForm field extraction.
+- `extractWords(page)` — per-word coordinates
+  (`{ x0, y0, x1, y1, text, block, line, word }[]`).
+- `ProgressBar` — stderr progress bar (mirrors `pymupdf4llm.helpers.progress`).
+- `Rect`, `Point` — geometry primitives.
+- `clusterStripes`, `computeReadingOrder` — reading-order helpers.
+- `getPageRotation`, `setPageRotation`, `removeRotation` — `/Rotate`
+  helpers.
 
-### Removed
+### Subpath export `mupdf4llm/llama`
 
-- **`toJson` and `toText`** removed from the public API. They previously
-  threw — they require Artifex's closed-source `pymupdf-layout` wheel
-  (Polyform Noncommercial license, ONNX ML model) which has no JS
-  distribution and cannot legally be repackaged. See `src/ocr/README.md`
-  for the parallel story on OCR.
+- `PDFMarkdownReader` — LlamaIndex adapter. Returns one `Document` (or
+  plain `{ text, extra_info }`) per page. `llamaindex` is declared as
+  an optional peer dependency.
+
+### `MarkdownOptions` knobs
+
+- Pages: `pages`, `margins`, `filename`, `pageChunks`, `pageSeparators`.
+- Text: `ignoreCode`, `forceText`, `hdrInfo`.
+- Tables: `tableStrategy: "lines_strict" | "lines" | "text" | "explicit" | null`,
+  `explicitTableGrids`.
+- Images: `writeImages`, `embedImages`, `imagePath`, `imageFormat`,
+  `dpi`, `imageSizeLimit`.
+- Words / chunks: `extractWords`.
+- Rotation: `removeRotation` (default `true`).
+- Misc: `showProgress`, `ignoreAlpha`, `fontsizeLimit`.
+
+### Parity
+
+Byte-for-byte parity with `pymupdf4llm.to_markdown(doc, use_layout=False)`
+for single-column / multi-column text, headers, bullets, inline styling,
+ruled tables (`lines_strict`), form-field extraction, and the synthetic
+fixtures in `tests/parity.test.ts`. Five real-world fixtures vendored
+from [py-pdf/sample-files](https://github.com/py-pdf/sample-files)
+(MIT) are exercised in `tests/realFixtures.test.ts` at three tiers
+(`exact` / `similar` / `smoke`).
+
+Ligatures are decomposed by default (`ﬁ → fi`) to match
+`page.get_text("rawdict")`. Pass `{ preserveLigatures: true }` to
+`extractTextDict` if you need the original glyphs.
+
+### Not available
+
+- **`pymupdf.layout` features** (`to_text`, `to_json`, layout-mode
+  `to_markdown`) — require Artifex's closed-source `pymupdf-layout`
+  ONNX wheel (Polyform Noncommercial). No JS distribution exists and
+  the model can't legally be repackaged. The previous placeholder
+  `toJson` / `toText` exports that threw at runtime are removed.
+- **OCR** — the official `mupdf` WASM bundle is built without
+  Tesseract/Leptonica. `src/ocr/README.md` documents a `tesseract.js`
+  recipe for callers who need it.
 
 ### Known parity gaps
 
-Surfaced by the real-world fixtures in `tests/realFixtures.test.ts`:
+Surfaced by `tests/realFixtures.test.ts`:
 
-- **Span grouping** — our `charsToSpans` groups characters into spans by
-  (font, size, color), but libmupdf via PyMuPDF breaks more aggressively.
-  In LaTeX-produced PDFs this means an en-dash "–" embedded in body text
-  arrives as part of a longer span instead of as its own span; downstream,
-  pymupdf4llm's bullet-substitution rule (en-dash + space → "- ") never
-  fires, so our output keeps "–" where Python's has "-".
-- **Multi-column tables** — the late-page table in `multicolumn.pdf`
-  groups columns differently in TS vs Python.
-- **Cropped/rotated pages** — `cropped-rotated-scaled.pdf` produces ~10×
-  more output in TS than Python because our default `removeRotation: true`
-  unrotates the page before extraction; Python without that flag emits
-  only the un-rotated subset.
+- **Span grouping** — TS groups characters into spans on
+  `(font, size, color)`; libmupdf via PyMuPDF breaks more aggressively,
+  so a bare en-dash doesn't surface as its own span and the
+  pymupdf4llm "en-dash + space → '- '" bullet rule never fires.
+- **Multi-column tables** — column header grouping in the trailing
+  table of `multicolumn.pdf` differs.
+- **Cropped/rotated pages** — our default `removeRotation: true`
+  emits ~10× more content for `cropped-rotated-scaled.pdf` than
+  Python's default-off behaviour. Intentional.
+- **`text` table strategy** — produces a usable grid but column
+  boundaries are heuristic and may not byte-match PyMuPDF.
 
-## [0.1.0] - 2026-05-22
+### Project structure
 
-Initial release. TypeScript/Bun port of the classic
-`pymupdf4llm.helpers.pymupdf_rag.to_markdown` pipeline on top of the
-official `mupdf` WASM package.
+- `src/index.ts` — public API entry
+- `src/helpers/` — concern-based subdirectories (`text/`, `tables/`,
+  `layout/`, `images/`, `forms/`) + shared primitives
+  (`pymupdfRag.ts`, `types.ts`, `constants.ts`, `geometry.ts`,
+  `utils.ts`, `progress.ts`) at root
+- `src/llama/pdfMarkdownReader.ts` — LlamaIndex adapter
+- `src/ocr/README.md` — why-no-OCR and tesseract.js recipe
+- `tests/{parity,realFixtures,units}.test.ts` — 15 tests total
+- `docs/` — VitePress + TypeDoc documentation site
 
-### Added
+### Tooling
 
-- `toMarkdown(buf, opts?)` and `toMarkdownPages(buf, opts?)` public API.
-- Walker-based text extractor that groups MuPDF characters into
-  PyMuPDF-shaped spans (`textPage.ts`).
-- Reading-order line builder ported from
-  `pymupdf4llm.helpers.get_text_lines.get_raw_lines` (`getTextLines.ts`).
-- Font-size-based header inference via `IdentifyHeaders`.
-- Three-phase column detection ported from
-  `pymupdf4llm.helpers.multi_column.column_boxes` (`multiColumn.ts`).
-- Custom `mupdf.Device` subclass that records `fillPath` / `strokePath`
-  / `fillImage` callbacks, replacing `page.get_drawings()` and
-  `page.get_image_info()` (`drawingDevice.ts`).
-- `lines_strict` table finder built on top of the drawing device, with
-  cell extraction and GitHub-flavored Markdown table emission
-  (`tableFinder.ts`).
-- Byte-for-byte parity tests against `pymupdf4llm.to_markdown` for
-  single-column, multi-column, multi-page, headers + bullets, and a
-  ruled-table fixture.
-
-### Known limitations
-
-- PyMuPDF's `pymupdf.layout` mode (`to_text`, `to_json`, layout-aware
-  markdown) is out of scope and the corresponding entry points throw.
-- No OCR, image extraction/embedding, or page rotation handling yet.
-- Only `tableStrategy: "lines_strict"` is implemented.
+- Linter pipeline: `bun lint` (write) and `bun lint:check` (CI-style)
+  run Prettier + ESLint v10 + tsc. The CI workflow enforces lint:check
+  on every push and PR.
+- Documentation site: VitePress + `typedoc-plugin-markdown`. Built and
+  deployed to GitHub Pages by `.github/workflows/docs.yml` on push to
+  main. CI smoke-builds the site on every PR.
 
 [Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/iamnalinor/mupdf4llm/releases/tag/v0.1.0
