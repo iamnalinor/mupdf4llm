@@ -1,0 +1,53 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # id-token: write enables Trusted Publishing — npm authenticates via OIDC,
+    # no NPM_TOKEN secret is required. The package on npmjs.com must already
+    # exist and have GitHub Actions configured as a trusted publisher
+    # (Settings → Publishing access → Trusted publishers).
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Upgrade npm (Trusted Publishing requires >= 11.5.1)
+        run: npm install -g npm@latest
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install pymupdf4llm (for parity tests)
+        run: pip install -r requirements.txt
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint (Prettier + ESLint + tsc)
+        run: bun run lint:check
+
+      - name: Run parity tests
+        run: bun test
+
+      - name: Build
+        run: bun run build
+
+      - name: Publish to npm (Trusted Publishing)
+        run: npm publish --provenance --access public

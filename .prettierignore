@@ -1,0 +1,9 @@
+dist/
+node_modules/
+tests/fixtures/
+bun.lock
+*.pdf
+
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+docs/reference/api/

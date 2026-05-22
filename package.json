@@ -1,0 +1,88 @@
+{
+  "name": "mupdf4llm",
+  "version": "0.1.0",
+  "description": "TypeScript port of pymupdf4llm — convert PDFs to LLM-ready Markdown using the mupdf WASM package.",
+  "keywords": [
+    "pdf",
+    "markdown",
+    "mupdf",
+    "pymupdf",
+    "pymupdf4llm",
+    "rag",
+    "llm",
+    "text-extraction"
+  ],
+  "license": "AGPL-3.0-or-later",
+  "author": "iamnalinor <https://github.com/iamnalinor>",
+  "homepage": "https://github.com/iamnalinor/mupdf4llm",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iamnalinor/mupdf4llm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/iamnalinor/mupdf4llm/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./llama": {
+      "types": "./dist/llama/pdfMarkdownReader.d.ts",
+      "import": "./dist/llama.js",
+      "require": "./dist/llama.cjs"
+    }
+  },
+  "peerDependencies": {
+    "llamaindex": "*"
+  },
+  "peerDependenciesMeta": {
+    "llamaindex": {
+      "optional": true
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "lint": "prettier --write . && eslint . && tsc --noEmit",
+    "lint:check": "prettier --check . && eslint . && tsc --noEmit",
+    "build": "bun run build:clean && bun run build:js && bun run build:dts",
+    "build:clean": "rm -rf dist",
+    "build:js": "bun build src/index.ts --target=node --format=esm --outfile=dist/index.js --external mupdf && bun build src/index.ts --target=node --format=cjs --outfile=dist/index.cjs --external mupdf && bun build src/llama/pdfMarkdownReader.ts --target=node --format=esm --outfile=dist/llama.js --external mupdf --external llamaindex && bun build src/llama/pdfMarkdownReader.ts --target=node --format=cjs --outfile=dist/llama.cjs --external mupdf --external llamaindex",
+    "build:dts": "tsc -p tsconfig.build.json",
+    "docs:api": "typedoc",
+    "docs:dev": "bun run docs:api && vitepress dev docs",
+    "docs:build": "bun run docs:api && vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "prepublishOnly": "bun run typecheck && bun test && bun run build"
+  },
+  "dependencies": {
+    "mupdf": "^1.27.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/parser": "^8.59.4",
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "typedoc": "^0.28.19",
+    "typedoc-plugin-markdown": "^4.11.0",
+    "typescript": "^5",
+    "vitepress": "^1.6.4"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
