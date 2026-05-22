@@ -37,7 +37,10 @@ export function joinRects(rects: (readonly number[] | Rect)[]): Rect {
   if (!rects.length) return Rect.empty();
   const first = rects[0]!;
   const a = first instanceof Rect ? [first.x0, first.y0, first.x1, first.y1] : first;
-  let x0 = a[0] as number, y0 = a[1] as number, x1 = a[2] as number, y1 = a[3] as number;
+  let x0 = a[0] as number,
+    y0 = a[1] as number,
+    x1 = a[2] as number,
+    y1 = a[3] as number;
   for (let i = 1; i < rects.length; i++) {
     const r = rects[i]!;
     const b = r instanceof Rect ? [r.x0, r.y0, r.x1, r.y1] : r;
@@ -49,7 +52,11 @@ export function joinRects(rects: (readonly number[] | Rect)[]): Rect {
   return new Rect(x0, y0, x1, y1);
 }
 
-export function almostInBbox(bbox: readonly number[] | Rect, clip: readonly number[] | Rect, portion = 0.8): boolean {
+export function almostInBbox(
+  bbox: readonly number[] | Rect,
+  clip: readonly number[] | Rect,
+  portion = 0.8,
+): boolean {
   const b = bbox instanceof Rect ? [bbox.x0, bbox.y0, bbox.x1, bbox.y1] : bbox;
   const c = clip instanceof Rect ? [clip.x0, clip.y0, clip.x1, clip.y1] : clip;
   const ix0 = Math.max(b[0] as number, c[0] as number);
@@ -99,3 +106,44 @@ export function bboxInBbox(
 }
 
 export type BBoxT = BBox;
+
+/**
+ * Group rectangles into horizontal stripes where consecutive rectangles
+ * vertically overlap. Ports `pymupdf4llm.helpers.utils.cluster_stripes` —
+ * the building block used by reading-order detection.
+ */
+export function clusterStripes(rects: Rect[], tolerance = 0): Rect[][] {
+  if (!rects.length) return [];
+  const sorted = [...rects].sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
+  const groups: Rect[][] = [];
+  let current: Rect[] = [sorted[0]!];
+  let curY1 = sorted[0]!.y1;
+  for (let i = 1; i < sorted.length; i++) {
+    const r = sorted[i]!;
+    if (r.y0 < curY1 - tolerance) {
+      current.push(r);
+      curY1 = Math.max(curY1, r.y1);
+    } else {
+      groups.push(current);
+      current = [r];
+      curY1 = r.y1;
+    }
+  }
+  groups.push(current);
+  return groups;
+}
+
+/**
+ * Sort rectangles into a single-page reading order: top-to-bottom by stripe,
+ * then left-to-right within each stripe. Mirrors
+ * `pymupdf4llm.helpers.utils.compute_reading_order`.
+ */
+export function computeReadingOrder(rects: Rect[], tolerance = 0): Rect[] {
+  const stripes = clusterStripes(rects, tolerance);
+  const out: Rect[] = [];
+  for (const stripe of stripes) {
+    stripe.sort((a, b) => a.x0 - b.x0 || a.y0 - b.y0);
+    out.push(...stripe);
+  }
+  return out;
+}

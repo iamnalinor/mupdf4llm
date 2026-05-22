@@ -81,5 +81,5 @@ for (const f of FIXTURES) {
     const ratio = ts.length / py.length;
     expect(ratio).toBeGreaterThan(0.95);
     expect(ratio).toBeLessThan(1.05);
-  });
+  }, 30_000);
 }

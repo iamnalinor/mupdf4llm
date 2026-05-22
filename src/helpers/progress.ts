@@ -11,7 +11,10 @@ export class ProgressBar<T> implements Iterable<T> {
   private prefix: string;
   private stream: { write(s: string): void };
 
-  constructor(items: Iterable<T>, opts: { width?: number; prefix?: string; stream?: { write(s: string): void } } = {}) {
+  constructor(
+    items: Iterable<T>,
+    opts: { width?: number; prefix?: string; stream?: { write(s: string): void } } = {},
+  ) {
     this.items = Array.isArray(items) ? items : Array.from(items);
     this.width = opts.width ?? 40;
     this.prefix = opts.prefix ?? "";
@@ -37,7 +40,9 @@ export class ProgressBar<T> implements Iterable<T> {
     const ratio = total === 0 ? 1 : done / total;
     const filled = Math.round(this.width * ratio);
     const bar = "#".repeat(filled) + "-".repeat(this.width - filled);
-    const pct = Math.round(ratio * 100).toString().padStart(3, " ");
+    const pct = Math.round(ratio * 100)
+      .toString()
+      .padStart(3, " ");
     this.stream.write(`\r${this.prefix}[${bar}] ${pct}% (${done}/${total})`);
   }
 }

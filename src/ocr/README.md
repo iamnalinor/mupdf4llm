@@ -22,7 +22,9 @@ import Tesseract from "tesseract.js";
 const page = doc.loadPage(0) as mupdf.PDFPage;
 const pixmap = page.toPixmap(mupdf.Matrix.scale(2, 2), mupdf.ColorSpace.DeviceRGB);
 const png = pixmap.asPNG();
-const { data: { text } } = await Tesseract.recognize(png, "eng");
+const {
+  data: { text },
+} = await Tesseract.recognize(png, "eng");
 ```
 
 We deliberately don't pull `tesseract.js` in as a dependency — it's

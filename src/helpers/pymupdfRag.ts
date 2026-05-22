@@ -1,15 +1,17 @@
 import * as mupdf from "mupdf";
 import { Rect } from "./geometry";
 import { REPLACEMENT_CHARACTER } from "./constants";
-import { isWhite, startswithBullet, areDisjoint, bboxInBbox } from "./utils";
+import { startswithBullet, areDisjoint } from "./utils";
 import { extractTextDict } from "./textPage";
-import { getRawLines, type RawLine } from "./getTextLines";
+import { getRawLines } from "./getTextLines";
 import { IdentifyHeaders, type HeaderIdProvider } from "./identifyHeaders";
 import { columnBoxes } from "./multiColumn";
 import { extractDrawings } from "./drawingDevice";
 import { findTables } from "./tableFinder";
 import { removeRotation, setPageRotation } from "./pageRotation";
 import { ProgressBar } from "./progress";
+import { renderPageImage, dedupeImages } from "./imageExtract";
+import { extractWords } from "./extractWords";
 import type { MarkdownOptions, PageContext, Span, LinkInfo, TableData } from "./types";
 
 interface PageParams {
@@ -48,13 +50,19 @@ function outsideAllBboxes(rect: Rect, list: Rect[]): boolean {
   return true;
 }
 
-function maxHeaderId(spans: Span[], getId: (s: Span, p: PageContext) => string, pageCtx: PageContext): string {
+function maxHeaderId(
+  spans: Span[],
+  getId: (s: Span, p: PageContext) => string,
+  pageCtx: PageContext,
+): string {
   const lens = new Set<number>();
   for (const s of spans) {
     const id = getId(s, pageCtx);
     if (id) lens.add(id.length);
   }
-  const sorted = Array.from(lens).filter((l) => l > 0).sort((a, b) => a - b);
+  const sorted = Array.from(lens)
+    .filter((l) => l > 0)
+    .sort((a, b) => a - b);
   if (!sorted.length) return "";
   return "#".repeat(sorted[0]! - 1) + " ";
 }
@@ -72,11 +80,14 @@ function writeText(
   },
 ): string {
   let out = "";
-  let nlines = getRawLines({ blocks: parms.blocks }, {
-    clip,
-    tolerance: 3,
-    ignoreInvisible: !parms.accept_invisible,
-  });
+  let nlines = getRawLines(
+    { blocks: parms.blocks },
+    {
+      clip,
+      tolerance: 3,
+      ignoreInvisible: !parms.accept_invisible,
+    },
+  );
   nlines = nlines.filter((l) => outsideAllBboxes(l.rect, parms.tab_rects0));
 
   for (const l of nlines) parms.line_rects.push(l.rect);
@@ -116,11 +127,14 @@ function writeText(
       }
     }
 
-    const text_full = spans.map((s) => s.text).join(" ").trim();
+    const text_full = spans
+      .map((s) => s.text)
+      .join(" ")
+      .trim();
 
     const all_strikeout = spans.every((s) => s.char_flags & 1);
     const all_italic = spans.every((s) => s.flags & 2);
-    const all_bold = spans.every((s) => (s.flags & 16) || (s.char_flags & 8));
+    const all_bold = spans.every((s) => s.flags & 16 || s.char_flags & 8);
     const all_mono = spans.every((s) => s.flags & 8);
 
     const hdr_string = maxHeaderId(spans, getHeaderId, pageCtx);
@@ -169,7 +183,7 @@ function writeText(
       (prev_lrect && lrect.y1 - prev_lrect.y1 > lrect.height * 1.5) ||
       span0.text.startsWith("[") ||
       startswithBullet(span0.text) ||
-      (span0.flags & 1)
+      span0.flags & 1
     ) {
       out += "\n";
     }
@@ -182,15 +196,27 @@ function writeText(
 
     for (const s of spans) {
       const mono = s.flags & 8;
-      const bold = (s.flags & 16) || (s.char_flags & 8);
+      const bold = s.flags & 16 || s.char_flags & 8;
       const italic = s.flags & 2;
       const strikeout = s.char_flags & 1;
       let prefix = "";
       let suffix = "";
-      if (mono) { prefix = "`" + prefix; suffix += "`"; }
-      if (bold) { prefix = "**" + prefix; suffix += "**"; }
-      if (italic) { prefix = "_" + prefix; suffix += "_"; }
-      if (strikeout) { prefix = "~~" + prefix; suffix += "~~"; }
+      if (mono) {
+        prefix = "`" + prefix;
+        suffix += "`";
+      }
+      if (bold) {
+        prefix = "**" + prefix;
+        suffix += "**";
+      }
+      if (italic) {
+        prefix = "_" + prefix;
+        suffix += "_";
+      }
+      if (strikeout) {
+        prefix = "~~" + prefix;
+        suffix += "~~";
+      }
 
       const ltext = resolveLinks(parms.links, s);
       let text: string;
@@ -217,7 +243,10 @@ function writeText(
     code = false;
   }
   out += "\n\n";
-  return out.replace(/ \n/g, "\n").replace(/ {2}/g, " ").replace(/\n\n\n/g, "\n\n");
+  return out
+    .replace(/ \n/g, "\n")
+    .replace(/ {2}/g, " ")
+    .replace(/\n\n\n/g, "\n\n");
 }
 
 function getLinks(page: mupdf.PDFPage): LinkInfo[] {
@@ -236,7 +265,11 @@ function getLinks(page: mupdf.PDFPage): LinkInfo[] {
   return out;
 }
 
-function getMetadata(doc: mupdf.PDFDocument, filename: string, pno: number): Record<string, unknown> {
+function getMetadata(
+  doc: mupdf.PDFDocument,
+  filename: string,
+  pno: number,
+): Record<string, unknown> {
   const keys: [string, string][] = [
     ["format", "format"],
     ["title", "info:Title"],
@@ -355,21 +388,44 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
     const links = getLinks(page);
     const td = extractTextDict(page, {});
 
-    // Tables via lines_strict drawings device
+    // Drawings + images via custom Device (lines_strict tables + image regions)
     let tabs: TableData[] = [];
-    let tab_rects = new Map<number, Rect>();
-    let tab_rects0: Rect[] = [];
-    if (opts.tableStrategy !== null) {
+    const tab_rects = new Map<number, Rect>();
+    const tab_rects0: Rect[] = [];
+    const pageImages: { bbox: Rect; ref: string }[] = [];
+    if (opts.tableStrategy !== null || opts.writeImages || opts.embedImages) {
       try {
-        const { paths } = extractDrawings(page);
-        tabs = findTables(td.blocks, paths, clip);
-        tabs.forEach((t, i) => {
-          const r = Rect.from(t.bbox).union(t.header.bbox);
-          tab_rects.set(i, r);
-          tab_rects0.push(r);
-        });
-      } catch (e) {
-        // tolerate failures; tables remain empty
+        const { paths, images } = extractDrawings(page);
+        if (opts.tableStrategy !== null) {
+          tabs = findTables(td.blocks, paths, clip, {
+            strategy: opts.tableStrategy ?? "lines_strict",
+            explicitGrid: opts.explicitTableGrids,
+          });
+          tabs.forEach((t, i) => {
+            const r = Rect.from(t.bbox).union(t.header.bbox);
+            tab_rects.set(i, r);
+            tab_rects0.push(r);
+          });
+        }
+        if (opts.writeImages || opts.embedImages) {
+          const deduped = dedupeImages(images);
+          deduped.forEach((img, i) => {
+            const rect = Rect.from(img.bbox as unknown as readonly number[]);
+            if (rect.isEmpty || !rect.isValid) return;
+            const ref = renderPageImage(page, pno, rect.intersect(clip), i, {
+              writeImages: opts.writeImages,
+              embedImages: opts.embedImages,
+              imagePath: opts.imagePath,
+              imageFormat: opts.imageFormat === "jpeg" ? "jpg" : opts.imageFormat,
+              dpi: opts.dpi,
+              imageSizeLimit: opts.imageSizeLimit,
+              filename,
+            });
+            if (ref) pageImages.push({ bbox: rect, ref });
+          });
+        }
+      } catch {
+        // tolerate failures; tables/images remain empty
       }
     }
 
@@ -383,7 +439,7 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
       links,
       tab_rects,
       tab_rects0,
-      img_rects: [],
+      img_rects: pageImages.map((p) => p.bbox),
       written_tables: new Set(),
       written_images: new Set(),
       line_rects: [],
@@ -419,6 +475,15 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
       parms.written_tables.add(i);
     }
 
+    // Emit images after text + tables. `ref` is either a relative file path
+    // (write_images) or a data: URL (embed_images); the alt text is the page
+    // number + image index for traceability.
+    for (let i = 0; i < pageImages.length; i++) {
+      const ref = pageImages[i]!.ref;
+      if (!ref) continue;
+      parms.md_string += `\n![image-${pno}-${i}](${ref})\n`;
+    }
+
     while (parms.md_string.startsWith("\n")) parms.md_string = parms.md_string.slice(1);
     parms.md_string = parms.md_string.replaceAll("\x00", REPLACEMENT_CHARACTER);
 
@@ -430,14 +495,25 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
       const metadata = getMetadata(doc, filename, pno);
       const toc = getToc(doc);
       const page_tocs = toc.filter((t) => t[2] === pno + 1);
+      const words = opts.extractWords ? extractWords(page) : [];
       chunk_output.push({
         metadata,
         toc_items: page_tocs,
-        tables: [],
-        images: [],
+        tables: parms.tabs.map((t) => ({
+          bbox: t.bbox,
+          rows: t.row_count,
+          columns: t.col_count,
+        })),
+        images: pageImages.map((p, i) => ({
+          bbox: p.bbox,
+          width: 0,
+          height: 0,
+          number: i,
+          ref: p.ref,
+        })),
         graphics: [],
         text: parms.md_string,
-        words: [],
+        words,
       });
     } else {
       document_output.push(parms.md_string);

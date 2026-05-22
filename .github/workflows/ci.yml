@@ -27,8 +27,8 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Typecheck
-        run: bun run typecheck
+      - name: Lint (Prettier + ESLint + tsc)
+        run: bun run lint:check
 
       - name: Run parity tests
         run: bun test

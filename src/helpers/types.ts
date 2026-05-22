@@ -58,6 +58,8 @@ export interface ImageInfo {
   width: number;
   height: number;
   number: number;
+  /** Set when writeImages/embedImages emitted a file path or data URI. */
+  ref?: string;
 }
 
 export interface TableData {
@@ -80,7 +82,10 @@ export interface FormField {
 
 export interface MarkdownOptions {
   pages?: number[];
-  hdrInfo?: { get_header_id(span: Span, page?: PageContext): string } | ((s: Span) => string) | false;
+  hdrInfo?:
+    | { get_header_id(span: Span, page?: PageContext): string }
+    | ((s: Span) => string)
+    | false;
   writeImages?: boolean;
   embedImages?: boolean;
   ignoreImages?: boolean;
@@ -97,7 +102,9 @@ export interface MarkdownOptions {
   dpi?: number;
   pageWidth?: number;
   pageHeight?: number;
-  tableStrategy?: "lines_strict" | null;
+  tableStrategy?: "lines_strict" | "lines" | "text" | "explicit" | null;
+  /** Explicit grid coordinates for `tableStrategy: "explicit"`. */
+  explicitTableGrids?: { hLines: number[]; vLines: number[] }[];
   graphicsLimit?: number | null;
   fontsizeLimit?: number;
   ignoreCode?: boolean;

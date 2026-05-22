@@ -38,10 +38,7 @@ function intersectsBboxes(bb: Rect, bboxes: Rect[]): boolean {
 function canExtend(temp: Rect, bb: Rect, bboxlist: (Rect | null)[], vertBboxes: Rect[]): boolean {
   for (const b of bboxlist) {
     const noVertHit = !intersectsBboxes(temp, vertBboxes);
-    if (
-      noVertHit &&
-      (b === null || b === bb || bboxIsEmpty(intersectRects(temp, b)))
-    ) continue;
+    if (noVertHit && (b === null || b === bb || bboxIsEmpty(intersectRects(temp, b)))) continue;
     return false;
   }
   return true;
@@ -95,7 +92,11 @@ function joinRectsPhase2(bboxes: Rect[]): Rect[] {
   for (let i = 1; i < prects.length; i++) {
     const r = prects[i]!;
     const r0 = newRects[newRects.length - 1]!;
-    if (Math.abs(r.x0 - r0.x0) <= 3 && Math.abs(r.x1 - r0.x1) <= 3 && Math.abs(r0.y1 - r.y0) <= 10) {
+    if (
+      Math.abs(r.x0 - r0.x0) <= 3 &&
+      Math.abs(r.x1 - r0.x1) <= 3 &&
+      Math.abs(r0.y1 - r.y0) <= 10
+    ) {
       r0.unionInPlace(r);
       continue;
     }
@@ -116,11 +117,13 @@ function joinRectsPhase3(bboxes: Rect[], pathRects: Rect[], cache: Map<string, n
       for (let i = prects.length - 1; i > 0; i--) {
         const prect1 = prects[i]!;
         if (prect1.x0 > prect0.x1 || prect1.x1 < prect0.x0) continue;
-        if (inBboxCache(prect0, pathRects, cache) !== inBboxCache(prect1, pathRects, cache)) continue;
+        if (inBboxCache(prect0, pathRects, cache) !== inBboxCache(prect1, pathRects, cache))
+          continue;
         const temp = prect0.union(prect1);
         const all = [...prects.filter((b): b is Rect => !!b), ...newRects];
         const hits = all.filter((b) => b.intersects(temp));
-        const onlyTwo = hits.length === 2 &&
+        const onlyTwo =
+          hits.length === 2 &&
           hits.some((b) => b.equals(prect0)) &&
           hits.some((b) => b.equals(prect1));
         if (onlyTwo) {
@@ -164,7 +167,7 @@ export function columnBoxes(blocks: Block[], opts: ColumnBoxesOpts): Rect[] {
   const vertBboxes: Rect[] = [];
   const pathRects: Rect[] = paths.slice().sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0);
 
-  let bboxes: Rect[] = [];
+  const bboxes: Rect[] = [];
 
   for (const b of blocks) {
     if (b.type !== 0) continue;
@@ -197,7 +200,7 @@ export function columnBoxes(blocks: Block[], opts: ColumnBoxesOpts): Rect[] {
   });
   if (!bboxes.length) return [];
 
-  let nblocks: (Rect | null)[] = [bboxes[0]!];
+  const nblocks: (Rect | null)[] = [bboxes[0]!];
   const remaining: (Rect | null)[] = bboxes.slice(1);
   const cache = new Map<string, number>();
 

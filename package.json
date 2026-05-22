@@ -31,6 +31,19 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./llama": {
+      "types": "./dist/llama/pdfMarkdownReader.d.ts",
+      "import": "./dist/llama.js",
+      "require": "./dist/llama.cjs"
+    }
+  },
+  "peerDependencies": {
+    "llamaindex": "*"
+  },
+  "peerDependenciesMeta": {
+    "llamaindex": {
+      "optional": true
     }
   },
   "files": [
@@ -42,9 +55,11 @@
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
+    "lint": "prettier --write . && eslint . && tsc --noEmit",
+    "lint:check": "prettier --check . && eslint . && tsc --noEmit",
     "build": "bun run build:clean && bun run build:js && bun run build:dts",
     "build:clean": "rm -rf dist",
-    "build:js": "bun build src/index.ts --target=node --format=esm --outfile=dist/index.js --external mupdf && bun build src/index.ts --target=node --format=cjs --outfile=dist/index.cjs --external mupdf",
+    "build:js": "bun build src/index.ts --target=node --format=esm --outfile=dist/index.js --external mupdf && bun build src/index.ts --target=node --format=cjs --outfile=dist/index.cjs --external mupdf && bun build src/llama/pdfMarkdownReader.ts --target=node --format=esm --outfile=dist/llama.js --external mupdf --external llamaindex && bun build src/llama/pdfMarkdownReader.ts --target=node --format=cjs --outfile=dist/llama.cjs --external mupdf --external llamaindex",
     "build:dts": "tsc -p tsconfig.build.json",
     "prepublishOnly": "bun run typecheck && bun test && bun run build"
   },
@@ -53,6 +68,11 @@
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "@typescript-eslint/eslint-plugin": "^8.59.4",
+    "@typescript-eslint/parser": "^8.59.4",
+    "eslint": "^10.4.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
     "typescript": "^5"
   },
   "engines": {

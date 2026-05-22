@@ -36,7 +36,7 @@ export function extractDrawings(page: mupdf.Page): PageDrawings {
   let imageCounter = 0;
 
   const dev = new mupdf.Device({
-    fillPath(path, _evenOdd, ctm, _cs, color, alpha) {
+    fillPath(path, _evenOdd, ctm, _cs, color, _alpha) {
       const b = path.getBounds(null as unknown as mupdf.StrokeState, ctm);
       const rect = new Rect(b[0], b[1], b[2], b[3]);
       if (!rect.isValid) return;

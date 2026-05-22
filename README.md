@@ -56,34 +56,57 @@ for (const c of chunks) {
 
 ## API
 
-| Export                                            | Description                                                                |
-| ------------------------------------------------- | -------------------------------------------------------------------------- |
-| `toMarkdown(buf, opts?): string`                  | Convert a PDF buffer to a single Markdown string.                          |
-| `toMarkdownPages(buf, opts?): PageChunk[]`        | Convert to one chunk per page (`{ metadata, text, ... }`).                 |
-| `IdentifyHeaders`                                 | Class that maps font sizes to `#…###` header levels.                       |
-| `TocHeaders`                                      | Class that uses the document's TOC to assign header levels.                |
-| `getKeyValues(doc)`                               | Extract every PDF form field as `FormField[]` (name, value, type, bbox).   |
-| `ProgressBar`                                     | Minimal stderr progress wrapper, mirrors `pymupdf4llm.helpers.progress`.   |
-| `Rect`, `Point`                                   | Geometry helpers re-exported for advanced users.                           |
-| `MarkdownOptions`, `PageChunk`, `FormField`       | TypeScript types.                                                          |
+| Export                                                           | Description                                                                                    |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `toMarkdown(buf, opts?): string`                                 | Convert a PDF buffer to a single Markdown string.                                              |
+| `toMarkdownPages(buf, opts?): PageChunk[]`                       | Convert to one chunk per page (`{ metadata, text, words, tables, images, ... }`).              |
+| `IdentifyHeaders`                                                | Class that maps font sizes to `#…###` header levels.                                           |
+| `TocHeaders`                                                     | Class that uses the document's TOC to assign header levels.                                    |
+| `getKeyValues(doc)`                                              | Extract every PDF form field as `FormField[]` (name, value, type, bbox).                       |
+| `extractWords(page)`                                             | Per-word coords: `{ x0, y0, x1, y1, text, block, line, word }[]`. Mirrors `get_text("words")`. |
+| `getPageRotation`, `setPageRotation`, `removeRotation`           | Read/write the page's `/Rotate` entry.                                                         |
+| `clusterStripes`, `computeReadingOrder`                          | Reading-order helpers (port subset of `pymupdf4llm.helpers.utils`).                            |
+| `ProgressBar`                                                    | Minimal stderr progress wrapper, mirrors `pymupdf4llm.helpers.progress`.                       |
+| `Rect`, `Point`                                                  | Geometry helpers re-exported for advanced users.                                               |
+| `mupdf4llm/llama → PDFMarkdownReader`                            | LlamaIndex adapter (subpath export; `llamaindex` is an optional peer dep).                     |
+| `MarkdownOptions`, `PageChunk`, `FormField`, `ImageInfo`, `Word` | TypeScript types.                                                                              |
 
 ## Options
 
-```ts
+````ts
 toMarkdown(buf, {
-  pages: [0, 1],          // 0-based page indices; default: all pages
-  margins: 0,             // number | [top, bottom] | [l, t, r, b]
-  ignoreCode: false,      // suppress ``` blocks for monospaced fonts
-  forceText: true,        // emit text on top of images
-  pageChunks: false,      // see toMarkdownPages
-  pageSeparators: false,  // insert "--- end of page=N ---" between pages
-  tableStrategy: "lines_strict", // or null to disable table detection
-  showProgress: false,    // render a progress bar on stderr
-  removeRotation: true,   // unrotate pages before processing (restored after)
-  hdrInfo: undefined,     // pass false to skip header inference, or a custom IdentifyHeaders / TocHeaders
-  filename: "",           // surfaced inside PageChunk.metadata.file_path
+  pages: [0, 1], // 0-based page indices; default: all pages
+  margins: 0, // number | [top, bottom] | [l, t, r, b]
+  ignoreCode: false, // suppress ``` blocks for monospaced fonts
+  forceText: true, // emit text on top of images
+  pageChunks: false, // see toMarkdownPages
+  pageSeparators: false, // insert "--- end of page=N ---" between pages
+  tableStrategy: "lines_strict", // "lines" | "text" | "explicit" | null to disable
+  explicitTableGrids: [], // { hLines, vLines } per table for "explicit" mode
+  writeImages: false, // save each image as a file under imagePath
+  embedImages: false, // inline images as base64 data: URIs
+  imagePath: "", // output directory for writeImages
+  imageFormat: "png", // "png" | "jpg" | "jpeg"
+  dpi: 150, // rasterization DPI for image extraction
+  imageSizeLimit: 0.05, // skip images smaller than this fraction of the page
+  extractWords: false, // emit per-word coords into PageChunk.words
+  removeRotation: true, // unrotate pages before processing (restored after)
+  showProgress: false, // render a progress bar on stderr
+  hdrInfo: undefined, // false to skip header inference, or a custom IdentifyHeaders / TocHeaders
+  filename: "", // surfaced inside PageChunk.metadata.file_path
 });
 ```
+
+### LlamaIndex adapter
+
+```ts
+import { PDFMarkdownReader } from "mupdf4llm/llama";
+
+const reader = new PDFMarkdownReader();
+const docs = await reader.loadData("paper.pdf");
+// one Document per page; if `llamaindex` is installed it's a real Document,
+// otherwise a plain { text, extra_info } record with the same shape.
+````
 
 See `src/helpers/types.ts` for the full `MarkdownOptions` interface.
 
@@ -96,9 +119,13 @@ What matches `pymupdf4llm.to_markdown` byte-for-byte today:
 - bullet lists (`startswith_bullet` semantics)
 - inline styling — bold, italic, monospaced/code, strikethrough — derived
   from MuPDF font properties
-- ruled tables detected via the `lines_strict` strategy
+- ruled tables detected via the `lines_strict` strategy (plus tolerant
+  `lines`, text-alignment `text`, and caller-supplied `explicit` modes)
 - page rotation handling (`removeRotation` option, default `true`)
 - form-field extraction via `getKeyValues`
+- image extraction & embedding (`writeImages` / `embedImages`)
+- per-word coordinates (`extractWords` → `PageChunk.words`)
+- LlamaIndex adapter at `mupdf4llm/llama`
 
 Not available (and why):
 
@@ -110,12 +137,16 @@ Not available (and why):
   Tesseract/Leptonica (`"No OCR support in this build"`). See
   `src/ocr/README.md` for a recipe using `tesseract.js`.
 
-Planned for follow-up releases:
+## Development
 
-- table strategies other than `lines_strict` (`lines`, `text`, `explicit`)
-- image extraction and embedding (`writeImages` / `embedImages`)
-- `extractWords` / per-word coordinates inside `PageChunk`
-- LlamaIndex adapter at `mupdf4llm/llama`
+```sh
+bun install
+pip install pymupdf4llm   # required for parity tests
+bun run typecheck
+bun test
+bun run lint              # prettier --write . && eslint . && tsc --noEmit
+bun run build             # emits dist/{index,llama}.{js,cjs} + .d.ts files
+```
 
 ## How parity is enforced
 
@@ -127,16 +158,6 @@ Planned for follow-up releases:
 4. Asserts strict string equality.
 
 CI runs the suite on every push (see `.github/workflows/ci.yml`).
-
-## Development
-
-```sh
-bun install
-pip install pymupdf4llm   # required for parity tests
-bun run typecheck
-bun test
-bun run build             # emits dist/{index.js,index.cjs,index.d.ts}
-```
 
 See `CONTRIBUTING.md` for the release workflow.
 

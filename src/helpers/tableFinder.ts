@@ -1,7 +1,9 @@
 import { Rect, type BBox } from "./geometry";
 import type { Block, TableData, DrawingPath, Span } from "./types";
-import { areDisjoint, isWhite } from "./utils";
+import { areDisjoint } from "./utils";
 import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD, CHAR_STRIKEOUT } from "./constants";
+
+export type TableStrategy = "lines_strict" | "lines" | "text" | "explicit";
 
 const TOL = 3; // snapping tolerance for line coordinates
 
@@ -14,24 +16,25 @@ function uniqueSorted(vals: number[]): number[] {
   return out;
 }
 
-/** Treat any path of width<=3 or height<=3 (or filled thin rect) as an edge. */
-function pathToEdges(p: DrawingPath): { kind: "h" | "v"; x0: number; y0: number; x1: number; y1: number }[] {
+/** Treat any path of width<=edgeMin or height<=edgeMin (or filled thin rect) as an edge. */
+function pathToEdges(
+  p: DrawingPath,
+  edgeMin = 3,
+): { kind: "h" | "v"; x0: number; y0: number; x1: number; y1: number }[] {
   const r = p.rect;
   const edges: { kind: "h" | "v"; x0: number; y0: number; x1: number; y1: number }[] = [];
-  if (r.width >= 3 && r.height <= 3) {
+  if (r.width >= edgeMin && r.height <= edgeMin) {
     const y = (r.y0 + r.y1) / 2;
     edges.push({ kind: "h", x0: r.x0, x1: r.x1, y0: y, y1: y });
-  } else if (r.height >= 3 && r.width <= 3) {
+  } else if (r.height >= edgeMin && r.width <= edgeMin) {
     const x = (r.x0 + r.x1) / 2;
     edges.push({ kind: "v", x0: x, x1: x, y0: r.y0, y1: r.y1 });
-  } else if (p.type === "f" && r.width >= 3 && r.height >= 3) {
-    // a filled rect → four edges
+  } else if (p.type === "f" && r.width >= edgeMin && r.height >= edgeMin) {
     edges.push({ kind: "h", x0: r.x0, x1: r.x1, y0: r.y0, y1: r.y0 });
     edges.push({ kind: "h", x0: r.x0, x1: r.x1, y0: r.y1, y1: r.y1 });
     edges.push({ kind: "v", x0: r.x0, x1: r.x0, y0: r.y0, y1: r.y1 });
     edges.push({ kind: "v", x0: r.x1, x1: r.x1, y0: r.y0, y1: r.y1 });
-  } else if (p.type === "s" && (r.width >= 3 || r.height >= 3)) {
-    // approximate stroked rect by its 4 edges
+  } else if (p.type === "s" && (r.width >= edgeMin || r.height >= edgeMin)) {
     edges.push({ kind: "h", x0: r.x0, x1: r.x1, y0: r.y0, y1: r.y0 });
     edges.push({ kind: "h", x0: r.x0, x1: r.x1, y0: r.y1, y1: r.y1 });
     edges.push({ kind: "v", x0: r.x0, x1: r.x0, y0: r.y0, y1: r.y1 });
@@ -42,7 +45,9 @@ function pathToEdges(p: DrawingPath): { kind: "h" | "v"; x0: number; y0: number;
 
 /** Merge collinear horizontal segments into spans. */
 function mergeH(edges: { kind: "h" | "v"; x0: number; y0: number; x1: number; y1: number }[]) {
-  const h = edges.filter((e) => e.kind === "h").map((e) => ({ y: e.y0, x0: Math.min(e.x0, e.x1), x1: Math.max(e.x0, e.x1) }));
+  const h = edges
+    .filter((e) => e.kind === "h")
+    .map((e) => ({ y: e.y0, x0: Math.min(e.x0, e.x1), x1: Math.max(e.x0, e.x1) }));
   h.sort((a, b) => a.y - b.y || a.x0 - b.x0);
   const merged: { y: number; x0: number; x1: number }[] = [];
   for (const s of h) {
@@ -57,7 +62,9 @@ function mergeH(edges: { kind: "h" | "v"; x0: number; y0: number; x1: number; y1
 }
 
 function mergeV(edges: { kind: "h" | "v"; x0: number; y0: number; x1: number; y1: number }[]) {
-  const v = edges.filter((e) => e.kind === "v").map((e) => ({ x: e.x0, y0: Math.min(e.y0, e.y1), y1: Math.max(e.y0, e.y1) }));
+  const v = edges
+    .filter((e) => e.kind === "v")
+    .map((e) => ({ x: e.x0, y0: Math.min(e.y0, e.y1), y1: Math.max(e.y0, e.y1) }));
   v.sort((a, b) => a.x - b.x || a.y0 - b.y0);
   const merged: { x: number; y0: number; y1: number }[] = [];
   for (const s of v) {
@@ -84,14 +91,19 @@ function clusterLines(
 ): ClusterCandidate[] {
   type Seg = { rect: Rect; isH: boolean; idx: number };
   const segs: Seg[] = [];
-  hLines.forEach((h, i) => segs.push({ rect: new Rect(h.x0, h.y - 1, h.x1, h.y + 1), isH: true, idx: i }));
-  vLines.forEach((v, i) => segs.push({ rect: new Rect(v.x - 1, v.y0, v.x + 1, v.y1), isH: false, idx: i }));
+  hLines.forEach((h, i) =>
+    segs.push({ rect: new Rect(h.x0, h.y - 1, h.x1, h.y + 1), isH: true, idx: i }),
+  );
+  vLines.forEach((v, i) =>
+    segs.push({ rect: new Rect(v.x - 1, v.y0, v.x + 1, v.y1), isH: false, idx: i }),
+  );
   if (!segs.length) return [];
 
   const parent = segs.map((_, i) => i);
   const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x]!)));
   const union = (a: number, b: number) => {
-    const ra = find(a), rb = find(b);
+    const ra = find(a),
+      rb = find(b);
     if (ra !== rb) parent[ra] = rb;
   };
   for (let i = 0; i < segs.length; i++) {
@@ -110,7 +122,10 @@ function clusterLines(
     if (ids.length < 4) continue; // need at least 2 horiz + 2 vert
     const h: typeof hLines = [];
     const v: typeof vLines = [];
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    let x0 = Infinity,
+      y0 = Infinity,
+      x1 = -Infinity,
+      y1 = -Infinity;
     for (const i of ids) {
       const s = segs[i]!;
       if (s.isH) h.push(hLines[s.idx]!);
@@ -126,9 +141,14 @@ function clusterLines(
   return out;
 }
 
-function spanStyling(spans: Span[]): { bold: boolean; italic: boolean; mono: boolean; strike: boolean } {
+function spanStyling(spans: Span[]): {
+  bold: boolean;
+  italic: boolean;
+  mono: boolean;
+  strike: boolean;
+} {
   if (!spans.length) return { bold: false, italic: false, mono: false, strike: false };
-  const bold = spans.every((s) => (s.flags & FLAG_BOLD) || (s.char_flags & CHAR_BOLD));
+  const bold = spans.every((s) => s.flags & FLAG_BOLD || s.char_flags & CHAR_BOLD);
   const italic = spans.every((s) => s.flags & FLAG_ITALIC);
   const mono = spans.every((s) => s.flags & FLAG_MONOSPACED);
   const strike = spans.every((s) => s.char_flags & CHAR_STRIKEOUT);
@@ -154,11 +174,24 @@ function extractCellText(blocks: Block[], cell: Rect, markdown: boolean): string
         }
         st = st.length > 2 ? st.replace(/\s+$/, "") : st;
         const { bold, italic, mono, strike } = spanStyling([span]);
-        let prefix = "", suffix = "";
-        if (strike) { prefix = "~~" + prefix; suffix = "~~" + suffix; }
-        if (bold) { prefix = "**" + prefix; suffix = "**" + suffix; }
-        if (italic) { prefix = "_" + prefix; suffix = "_" + suffix; }
-        if (mono) { prefix = "`" + prefix; suffix = "`" + suffix; }
+        let prefix = "",
+          suffix = "";
+        if (strike) {
+          prefix = "~~" + prefix;
+          suffix = "~~" + suffix;
+        }
+        if (bold) {
+          prefix = "**" + prefix;
+          suffix = "**" + suffix;
+        }
+        if (italic) {
+          prefix = "_" + prefix;
+          suffix = "_" + suffix;
+        }
+        if (mono) {
+          prefix = "`" + prefix;
+          suffix = "`" + suffix;
+        }
         if (!st.trim()) {
           text += " ";
         } else {
@@ -227,19 +260,145 @@ class Table implements TableData {
   }
 }
 
-export function findTables(blocks: Block[], paths: DrawingPath[], clip: Rect): TableData[] {
+interface FindTablesOpts {
+  strategy?: TableStrategy;
+  explicitGrid?: { hLines: number[]; vLines: number[] }[];
+}
+
+export function findTables(
+  blocks: Block[],
+  paths: DrawingPath[],
+  clip: Rect,
+  opts: FindTablesOpts = {},
+): TableData[] {
+  const strategy: TableStrategy = opts.strategy ?? "lines_strict";
+
+  if (strategy === "explicit") {
+    return findTablesExplicit(blocks, opts.explicitGrid ?? []);
+  }
+  if (strategy === "text") {
+    return findTablesByText(blocks, clip);
+  }
+
+  // "lines" / "lines_strict" — same algorithm, "lines" is more tolerant of
+  // partial/short edges.
   if (!paths.length) return [];
   const allEdges: { kind: "h" | "v"; x0: number; y0: number; x1: number; y1: number }[] = [];
+  const edgeMin = strategy === "lines" ? 2 : 3;
   for (const p of paths) {
     if (!clip.contains(p.rect) && !p.rect.intersects(clip)) continue;
-    allEdges.push(...pathToEdges(p));
+    allEdges.push(...pathToEdges(p, edgeMin));
   }
   const hLines = mergeH(allEdges);
   const vLines = mergeV(allEdges);
   const clusters = clusterLines(hLines, vLines);
   const out: TableData[] = [];
+  const minRows = strategy === "lines" ? 1 : 2;
   for (const cl of clusters) {
     const t = new Table(blocks, cl);
+    if (t.row_count >= minRows && t.col_count >= 2) out.push(t);
+  }
+  out.sort((a, b) => a.bbox[0] - b.bbox[0] || a.bbox[1] - b.bbox[1]);
+  return out;
+}
+
+/** Build TableData directly from caller-supplied row/col coordinate arrays. */
+function findTablesExplicit(
+  blocks: Block[],
+  grids: { hLines: number[]; vLines: number[] }[],
+): TableData[] {
+  const out: TableData[] = [];
+  for (const g of grids) {
+    const rows = uniqueSorted(g.hLines);
+    const cols = uniqueSorted(g.vLines);
+    if (rows.length < 2 || cols.length < 2) continue;
+    const bbox = new Rect(cols[0]!, rows[0]!, cols[cols.length - 1]!, rows[rows.length - 1]!);
+    const hLineRecs = rows.map((y) => ({
+      y,
+      x0: cols[0]!,
+      x1: cols[cols.length - 1]!,
+    }));
+    const vLineRecs = cols.map((x) => ({
+      x,
+      y0: rows[0]!,
+      y1: rows[rows.length - 1]!,
+    }));
+    out.push(new Table(blocks, { bbox, hLines: hLineRecs, vLines: vLineRecs }));
+  }
+  return out;
+}
+
+/**
+ * Detect tables purely from text alignment — no ruling lines required.
+ *
+ * Approach: walk the page's text lines, cluster them into rectangular
+ * regions where each row has the same set of column-start x-coordinates
+ * (within a small tolerance). A region of ≥2 such rows with ≥2 columns
+ * becomes a table.
+ *
+ * This is a deliberately lightweight port — `pymupdf4llm.helpers.utils`
+ * does a deeper analysis. For tables with no rules it produces a usable
+ * markdown grid, but column boundaries may not match PyMuPDF byte-for-byte.
+ */
+function findTablesByText(blocks: Block[], clip: Rect): TableData[] {
+  type LineRec = { rect: Rect; spans: Span[]; xs: number[] };
+  const lines: LineRec[] = [];
+  for (const b of blocks) {
+    if (b.type !== 0) continue;
+    if (areDisjoint(b.bbox, clip)) continue;
+    for (const l of b.lines) {
+      if (areDisjoint(l.bbox, clip)) continue;
+      const spans = l.spans.filter((s) => s.text.trim());
+      if (spans.length < 2) continue;
+      const xs = spans.map((s) => s.bbox.x0);
+      lines.push({ rect: Rect.from(l.bbox), spans, xs });
+    }
+  }
+  if (lines.length < 2) return [];
+  lines.sort((a, b) => a.rect.y0 - b.rect.y0 || a.rect.x0 - b.rect.x0);
+
+  // Cluster adjacent lines that share at least 2 column-start x-coordinates.
+  const clusters: LineRec[][] = [];
+  let current: LineRec[] = [lines[0]!];
+  for (let i = 1; i < lines.length; i++) {
+    const prev = current[current.length - 1]!;
+    const cur = lines[i]!;
+    if (cur.rect.y0 - prev.rect.y1 > prev.rect.height * 2) {
+      if (current.length >= 2) clusters.push(current);
+      current = [cur];
+      continue;
+    }
+    const shared = cur.xs.filter((x) => prev.xs.some((px) => Math.abs(px - x) <= TOL * 2));
+    if (shared.length >= 2) {
+      current.push(cur);
+    } else {
+      if (current.length >= 2) clusters.push(current);
+      current = [cur];
+    }
+  }
+  if (current.length >= 2) clusters.push(current);
+
+  const out: TableData[] = [];
+  for (const group of clusters) {
+    const colXs = uniqueSorted(group.flatMap((l) => l.xs));
+    if (colXs.length < 2) continue;
+    const rowYs: number[] = [];
+    for (const l of group) rowYs.push(l.rect.y0, l.rect.y1);
+    const rows = uniqueSorted(rowYs);
+    if (rows.length < 3) continue;
+    const padRight = Math.max(...group.map((l) => l.rect.x1));
+    const padBottom = Math.max(...group.map((l) => l.rect.y1));
+    const allCols = [...colXs, padRight + 1];
+    const allRows = rows[rows.length - 1]! >= padBottom ? rows : [...rows, padBottom + 1];
+    const bbox = new Rect(
+      allCols[0]!,
+      allRows[0]!,
+      allCols[allCols.length - 1]!,
+      allRows[allRows.length - 1]!,
+    );
+    const hRecs = allRows.map((y) => ({ y, x0: bbox.x0, x1: bbox.x1 }));
+    const vRecs = allCols.map((x) => ({ x, y0: bbox.y0, y1: bbox.y1 }));
+    const t = new Table(blocks, { bbox, hLines: hRecs, vLines: vRecs });
     if (t.row_count >= 2 && t.col_count >= 2) out.push(t);
   }
   out.sort((a, b) => a.bbox[0] - b.bbox[0] || a.bbox[1] - b.bbox[1]);

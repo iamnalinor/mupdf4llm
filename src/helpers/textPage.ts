@@ -89,7 +89,10 @@ function charsToSpans(chars: CharData[]): Span[] {
 function buildSpan(chars: CharData[]): Span {
   const first = chars[0]!;
   const text = chars.map((c) => c.c).join("");
-  let x0 = first.bbox[0], y0 = first.bbox[1], x1 = first.bbox[2], y1 = first.bbox[3];
+  let x0 = first.bbox[0],
+    y0 = first.bbox[1],
+    x1 = first.bbox[2],
+    y1 = first.bbox[3];
   for (let i = 1; i < chars.length; i++) {
     const b = chars[i]!.bbox;
     if (b[0] < x0) x0 = b[0];

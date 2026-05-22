@@ -11,7 +11,10 @@ export class IdentifyHeaders implements HeaderIdProvider {
   body_limit: number;
   header_id: Map<number, string> = new Map();
 
-  constructor(doc: mupdf.PDFDocument, opts: { pages?: number[]; body_limit?: number; max_levels?: number } = {}) {
+  constructor(
+    doc: mupdf.PDFDocument,
+    opts: { pages?: number[]; body_limit?: number; max_levels?: number } = {},
+  ) {
     const bodyLimit = opts.body_limit ?? 12;
     const maxLevels = opts.max_levels ?? 6;
     if (!(Number.isInteger(maxLevels) && maxLevels >= 1 && maxLevels <= 6)) {

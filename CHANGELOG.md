@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Image extraction** — `writeImages` saves each detected image region to
+  disk under `imagePath` (filename `<filename>-<page>-<index>.<ext>`);
+  `embedImages` inlines them as base64 `data:` URIs in the markdown.
+  Ports `pymupdf4llm.helpers.pymupdf_rag.to_markdown`'s `write_images` /
+  `embed_images` switches plus the `image_format`, `image_path`, `dpi`,
+  `image_size_limit` options. New module: `src/helpers/imageExtract.ts`.
+- **Per-word extraction** — `extractWords(page)` returns
+  `{ x0, y0, x1, y1, text, block, line, word }[]` (mirrors
+  `page.get_text("words")`). `MarkdownOptions.extractWords: true` makes
+  `toMarkdownPages` emit the array on each `PageChunk.words`. New module:
+  `src/helpers/extractWords.ts`.
+- **All four `tableStrategy` modes** — `lines_strict` (existing),
+  `lines` (more tolerant edge-detection), `text` (text-alignment-only
+  clustering), `explicit` (caller-supplied row/col coordinates via
+  `explicitTableGrids`). `tableFinder.findTables` now takes an `opts`
+  object with `{ strategy, explicitGrid }`.
+- **Reading-order helpers** — `clusterStripes(rects, tolerance?)` and
+  `computeReadingOrder(rects, tolerance?)` (port subset of
+  `pymupdf4llm.helpers.utils`).
+- **LlamaIndex adapter** at the `mupdf4llm/llama` subpath export. Ports
+  `pymupdf4llm.llama.PDFMarkdownReader` — `loadData(filePath, extra?)`
+  returns one `Document` (or plain `{ text, extra_info }` if
+  `llamaindex` isn't installed) per page. `llamaindex` is declared as
+  an optional peer dependency in `package.json`.
+- **Linter pipeline** — Prettier (write mode) + ESLint v10 (flat config,
+  TypeScript-aware) + `tsc --noEmit`, runnable as `bun lint` (writes)
+  and `bun lint:check` (CI-style).
+- **Unit tests** in `tests/units.test.ts` for the smaller modules
+  (`utils`, `geometry`, `progress`, `IdentifyHeaders`, `TocHeaders`).
 - **Real-world parity fixtures** in `tests/fixtures/` (vendored from
   [py-pdf/sample-files](https://github.com/py-pdf/sample-files), MIT)
   exercising LaTeX ligatures, document outlines, AcroForm widgets,
@@ -44,15 +73,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (Polyform Noncommercial license, ONNX ML model) which has no JS
   distribution and cannot legally be repackaged. See `src/ocr/README.md`
   for the parallel story on OCR.
-
-### Planned
-
-- Table strategies `lines`, `text`, `explicit` (only `lines_strict`
-  today). This is the largest remaining parity gap — for tables without
-  full cell rules.
-- Image extraction & embedding (`writeImages` / `embedImages`).
-- Per-word coordinates (`extractWords`) in `PageChunk`.
-- LlamaIndex adapter at `mupdf4llm/llama` subpath export.
 
 ### Known parity gaps
 

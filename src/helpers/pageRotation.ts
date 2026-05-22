@@ -25,7 +25,11 @@ export function getPageRotation(page: mupdf.PDFPage): number {
  *
  * Mirrors `page.set_rotation` / `page.remove_rotation` from PyMuPDF.
  */
-export function setPageRotation(doc: mupdf.PDFDocument, page: mupdf.PDFPage, degrees: number): void {
+export function setPageRotation(
+  doc: mupdf.PDFDocument,
+  page: mupdf.PDFPage,
+  degrees: number,
+): void {
   const norm = ((Math.round(degrees) % 360) + 360) % 360;
   try {
     const obj = page.getObject();
