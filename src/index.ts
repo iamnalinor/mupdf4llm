@@ -3,13 +3,13 @@ import { toMarkdown as ragToMarkdown } from "./helpers/pymupdfRag";
 import type { MarkdownOptions, PageChunk } from "./helpers/types";
 
 export type { MarkdownOptions, PageChunk, FormField, ImageInfo } from "./helpers/types";
-export { IdentifyHeaders, TocHeaders } from "./helpers/identifyHeaders";
-export { getKeyValues } from "./helpers/formFields";
-export { extractWords, type Word } from "./helpers/extractWords";
+export { IdentifyHeaders, TocHeaders } from "./helpers/text/identifyHeaders";
+export { getKeyValues } from "./helpers/forms/formFields";
+export { extractWords, type Word } from "./helpers/text/extractWords";
 export { Rect, Point } from "./helpers/geometry";
 export { ProgressBar } from "./helpers/progress";
 export { clusterStripes, computeReadingOrder } from "./helpers/utils";
-export { getPageRotation, setPageRotation, removeRotation } from "./helpers/pageRotation";
+export { getPageRotation, setPageRotation, removeRotation } from "./helpers/layout/pageRotation";
 
 /** Open a PDF from bytes and convert to markdown. */
 export function toMarkdown(buf: Uint8Array | ArrayBuffer, opts: MarkdownOptions = {}): string {

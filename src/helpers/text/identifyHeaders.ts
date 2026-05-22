@@ -1,7 +1,7 @@
 import * as mupdf from "mupdf";
 import { extractTextDict } from "./textPage";
-import { isWhite } from "./utils";
-import type { Span, PageContext } from "./types";
+import { isWhite } from "../utils";
+import type { Span, PageContext } from "../types";
 
 export interface HeaderIdProvider {
   get_header_id(span: Span, page?: PageContext): string;

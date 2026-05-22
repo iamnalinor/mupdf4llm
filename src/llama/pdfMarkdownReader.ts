@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import * as mupdf from "mupdf";
 import { toMarkdown as ragToMarkdown } from "../helpers/pymupdfRag";
-import { IdentifyHeaders } from "../helpers/identifyHeaders";
+import { IdentifyHeaders } from "../helpers/text/identifyHeaders";
 import type { MarkdownOptions } from "../helpers/types";
 
 type MetaFilter = (m: Record<string, unknown>) => Record<string, unknown>;

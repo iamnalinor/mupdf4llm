@@ -1,7 +1,7 @@
-import { Rect, type BBox } from "./geometry";
-import type { Block, TableData, DrawingPath, Span } from "./types";
-import { areDisjoint } from "./utils";
-import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD, CHAR_STRIKEOUT } from "./constants";
+import { Rect, type BBox } from "../geometry";
+import type { Block, TableData, DrawingPath, Span } from "../types";
+import { areDisjoint } from "../utils";
+import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD, CHAR_STRIKEOUT } from "../constants";
 
 export type TableStrategy = "lines_strict" | "lines" | "text" | "explicit";
 

@@ -2,16 +2,16 @@ import * as mupdf from "mupdf";
 import { Rect } from "./geometry";
 import { REPLACEMENT_CHARACTER } from "./constants";
 import { startswithBullet, areDisjoint } from "./utils";
-import { extractTextDict } from "./textPage";
-import { getRawLines } from "./getTextLines";
-import { IdentifyHeaders, type HeaderIdProvider } from "./identifyHeaders";
-import { columnBoxes } from "./multiColumn";
-import { extractDrawings } from "./drawingDevice";
-import { findTables } from "./tableFinder";
-import { removeRotation, setPageRotation } from "./pageRotation";
+import { extractTextDict } from "./text/textPage";
+import { getRawLines } from "./text/getTextLines";
+import { IdentifyHeaders, type HeaderIdProvider } from "./text/identifyHeaders";
+import { columnBoxes } from "./layout/multiColumn";
+import { extractDrawings } from "./tables/drawingDevice";
+import { findTables } from "./tables/tableFinder";
+import { removeRotation, setPageRotation } from "./layout/pageRotation";
 import { ProgressBar } from "./progress";
-import { renderPageImage, dedupeImages } from "./imageExtract";
-import { extractWords } from "./extractWords";
+import { renderPageImage, dedupeImages } from "./images/imageExtract";
+import { extractWords } from "./text/extractWords";
 import type { MarkdownOptions, PageContext, Span, LinkInfo, TableData } from "./types";
 
 interface PageParams {

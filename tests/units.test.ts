@@ -7,7 +7,7 @@ import {
   isWhite,
 } from "../src/helpers/utils";
 import { ProgressBar } from "../src/helpers/progress";
-import { TocHeaders, IdentifyHeaders } from "../src/helpers/identifyHeaders";
+import { TocHeaders, IdentifyHeaders } from "../src/helpers/text/identifyHeaders";
 import * as mupdf from "mupdf";
 
 test("isWhite + startswithBullet", () => {

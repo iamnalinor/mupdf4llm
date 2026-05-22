@@ -1,5 +1,5 @@
 import * as mupdf from "mupdf";
-import { Rect } from "./geometry";
+import { Rect } from "../geometry";
 
 /**
  * Per-word record produced by {@link extractWords}, matching the structure

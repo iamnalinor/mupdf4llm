@@ -1,8 +1,8 @@
 import * as mupdf from "mupdf";
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, basename } from "node:path";
-import { Rect } from "./geometry";
-import type { ImageInfo } from "./types";
+import { Rect } from "../geometry";
+import type { ImageInfo } from "../types";
 
 export interface ImageExtractOpts {
   /** Save image files to this directory. Mutually exclusive with `embedImages`. */

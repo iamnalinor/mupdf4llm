@@ -1,7 +1,7 @@
-import { Rect } from "./geometry";
-import { TYPE3_FONT_NAME } from "./constants";
-import { isWhite, almostInBbox, areDisjoint, bboxIsEmpty } from "./utils";
-import type { Block, Span, TextDict } from "./types";
+import { Rect } from "../geometry";
+import { TYPE3_FONT_NAME } from "../constants";
+import { isWhite, almostInBbox, areDisjoint, bboxIsEmpty } from "../utils";
+import type { Block, Span, TextDict } from "../types";
 
 export interface RawLine {
   rect: Rect;

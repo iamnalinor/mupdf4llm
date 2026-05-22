@@ -1,5 +1,5 @@
 import * as mupdf from "mupdf";
-import type { FormField } from "./types";
+import type { FormField } from "../types";
 
 /**
  * Extract every form field from a PDF as a flat list, one entry per widget.
