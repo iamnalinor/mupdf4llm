@@ -61,6 +61,10 @@
     "build:clean": "rm -rf dist",
     "build:js": "bun build src/index.ts --target=node --format=esm --outfile=dist/index.js --external mupdf && bun build src/index.ts --target=node --format=cjs --outfile=dist/index.cjs --external mupdf && bun build src/llama/pdfMarkdownReader.ts --target=node --format=esm --outfile=dist/llama.js --external mupdf --external llamaindex && bun build src/llama/pdfMarkdownReader.ts --target=node --format=cjs --outfile=dist/llama.cjs --external mupdf --external llamaindex",
     "build:dts": "tsc -p tsconfig.build.json",
+    "docs:api": "typedoc",
+    "docs:dev": "bun run docs:api && vitepress dev docs",
+    "docs:build": "bun run docs:api && vitepress build docs",
+    "docs:preview": "vitepress preview docs",
     "prepublishOnly": "bun run typecheck && bun test && bun run build"
   },
   "dependencies": {
@@ -73,7 +77,10 @@
     "eslint": "^10.4.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.3",
-    "typescript": "^5"
+    "typedoc": "^0.28.19",
+    "typedoc-plugin-markdown": "^4.11.0",
+    "typescript": "^5",
+    "vitepress": "^1.6.4"
   },
   "engines": {
     "node": ">=20"

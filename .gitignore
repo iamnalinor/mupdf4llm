@@ -3,3 +3,8 @@ dist/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+# Docs site build output + auto-generated TypeDoc pages
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+docs/reference/api/

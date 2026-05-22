@@ -30,6 +30,9 @@ jobs:
       - name: Lint (Prettier + ESLint + tsc)
         run: bun run lint:check
 
+      - name: Build docs (smoke)
+        run: bun run docs:build
+
       - name: Run parity tests
         run: bun test
 
