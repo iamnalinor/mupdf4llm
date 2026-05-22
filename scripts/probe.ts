@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { toMarkdown } from "../src/index.ts";
+import { toMarkdown } from "../src/index";
 
 const file = process.argv[2];
 if (!file) {

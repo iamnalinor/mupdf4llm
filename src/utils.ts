@@ -1,5 +1,5 @@
-import { WHITE_CHARS, BULLETS } from "./constants.ts";
-import { Rect, type BBox } from "./geometry.ts";
+import { WHITE_CHARS, BULLETS } from "./constants";
+import { Rect, type BBox } from "./geometry";
 
 export function isWhite(text: string): boolean {
   for (const c of text) {

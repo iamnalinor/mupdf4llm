@@ -1,4 +1,4 @@
-import type { Rect, BBox } from "./geometry.ts";
+import type { Rect, BBox } from "./geometry";
 
 export interface Span {
   bbox: Rect;

@@ -1,6 +1,6 @@
-import { Rect } from "./geometry.ts";
-import { isWhite, areDisjoint, bboxIsEmpty, intersectRects } from "./utils.ts";
-import type { Block } from "./types.ts";
+import { Rect } from "./geometry";
+import { isWhite, areDisjoint, bboxIsEmpty, intersectRects } from "./utils";
+import type { Block } from "./types";
 
 export interface ColumnBoxesOpts {
   clip: Rect;

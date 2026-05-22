@@ -1,5 +1,5 @@
 import * as mupdf from "mupdf";
-import { Rect, type BBox } from "./geometry.ts";
+import { Rect, type BBox } from "./geometry";
 import {
   FLAG_BOLD,
   FLAG_ITALIC,
@@ -7,8 +7,8 @@ import {
   FLAG_SERIF,
   CHAR_BOLD,
   CHAR_FILLED,
-} from "./constants.ts";
-import type { Block, Line, Span, TextDict } from "./types.ts";
+} from "./constants";
+import type { Block, Line, Span, TextDict } from "./types";
 
 /** Pack mupdf.js Color [r,g,b] (0..1) into a PyMuPDF-style packed sRGB int. */
 function packColor(color: number[] | null | undefined): number {

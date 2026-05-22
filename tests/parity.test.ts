@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { execSync } from "node:child_process";
-import { toMarkdown } from "../src/index.ts";
+import { toMarkdown } from "../src/index";
 
 const FIXTURES = "/tmp/mupdf4llm-fixtures";
 

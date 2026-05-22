@@ -1,14 +1,14 @@
 import * as mupdf from "mupdf";
-import { Rect } from "./geometry.ts";
-import { REPLACEMENT_CHARACTER } from "./constants.ts";
-import { isWhite, startswithBullet, areDisjoint, bboxInBbox } from "./utils.ts";
-import { extractTextDict } from "./textPage.ts";
-import { getRawLines, type RawLine } from "./getTextLines.ts";
-import { IdentifyHeaders, type HeaderIdProvider } from "./identifyHeaders.ts";
-import { columnBoxes } from "./multiColumn.ts";
-import { extractDrawings } from "./drawingDevice.ts";
-import { findTables } from "./tableFinder.ts";
-import type { MarkdownOptions, PageContext, Span, LinkInfo, TableData } from "./types.ts";
+import { Rect } from "./geometry";
+import { REPLACEMENT_CHARACTER } from "./constants";
+import { isWhite, startswithBullet, areDisjoint, bboxInBbox } from "./utils";
+import { extractTextDict } from "./textPage";
+import { getRawLines, type RawLine } from "./getTextLines";
+import { IdentifyHeaders, type HeaderIdProvider } from "./identifyHeaders";
+import { columnBoxes } from "./multiColumn";
+import { extractDrawings } from "./drawingDevice";
+import { findTables } from "./tableFinder";
+import type { MarkdownOptions, PageContext, Span, LinkInfo, TableData } from "./types";
 
 interface PageParams {
   page: mupdf.PDFPage;

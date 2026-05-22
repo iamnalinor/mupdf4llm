@@ -1,7 +1,7 @@
-import { Rect, type BBox } from "./geometry.ts";
-import type { Block, TableData, DrawingPath, Span } from "./types.ts";
-import { areDisjoint, isWhite } from "./utils.ts";
-import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD, CHAR_STRIKEOUT } from "./constants.ts";
+import { Rect, type BBox } from "./geometry";
+import type { Block, TableData, DrawingPath, Span } from "./types";
+import { areDisjoint, isWhite } from "./utils";
+import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD, CHAR_STRIKEOUT } from "./constants";
 
 const TOL = 3; // snapping tolerance for line coordinates
 

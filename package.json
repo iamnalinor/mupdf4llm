@@ -1,19 +1,61 @@
 {
   "name": "mupdf4llm",
   "version": "0.1.0",
-  "module": "src/index.ts",
+  "description": "TypeScript port of pymupdf4llm — convert PDFs to LLM-ready Markdown using the mupdf WASM package.",
+  "keywords": [
+    "pdf",
+    "markdown",
+    "mupdf",
+    "pymupdf",
+    "pymupdf4llm",
+    "rag",
+    "llm",
+    "text-extraction"
+  ],
+  "license": "AGPL-3.0-or-later",
+  "author": "iamnalinor <https://github.com/iamnalinor>",
+  "homepage": "https://github.com/iamnalinor/mupdf4llm",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iamnalinor/mupdf4llm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/iamnalinor/mupdf4llm/issues"
+  },
   "type": "module",
-  "private": true,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
   "scripts": {
-    "test": "bun test"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  },
-  "peerDependencies": {
-    "typescript": "^5"
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "build": "bun run build:clean && bun run build:js && bun run build:dts",
+    "build:clean": "rm -rf dist",
+    "build:js": "bun build src/index.ts --target=node --format=esm --outfile=dist/index.js --external mupdf && bun build src/index.ts --target=node --format=cjs --outfile=dist/index.cjs --external mupdf",
+    "build:dts": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "bun run typecheck && bun test && bun run build"
   },
   "dependencies": {
     "mupdf": "^1.27.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

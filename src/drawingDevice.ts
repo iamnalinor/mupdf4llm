@@ -1,6 +1,6 @@
 import * as mupdf from "mupdf";
-import { Rect } from "./geometry.ts";
-import type { DrawingPath, ImageInfo } from "./types.ts";
+import { Rect } from "./geometry";
+import type { DrawingPath, ImageInfo } from "./types";
 
 function colorToRGB(color: number[] | null | undefined): [number, number, number] | null {
   if (!color) return null;

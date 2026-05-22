@@ -1,10 +1,10 @@
 import * as mupdf from "mupdf";
-import { toMarkdown as ragToMarkdown } from "./rag.ts";
-import type { MarkdownOptions, PageChunk } from "./types.ts";
+import { toMarkdown as ragToMarkdown } from "./rag";
+import type { MarkdownOptions, PageChunk } from "./types";
 
-export type { MarkdownOptions, PageChunk } from "./types.ts";
-export { IdentifyHeaders } from "./identifyHeaders.ts";
-export { Rect, Point } from "./geometry.ts";
+export type { MarkdownOptions, PageChunk } from "./types";
+export { IdentifyHeaders } from "./identifyHeaders";
+export { Rect, Point } from "./geometry";
 
 /** Open a PDF from bytes and convert to markdown. */
 export function toMarkdown(buf: Uint8Array | ArrayBuffer, opts: MarkdownOptions = {}): string {
