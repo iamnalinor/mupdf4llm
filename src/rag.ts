@@ -6,7 +6,9 @@ import { extractTextDict } from "./textPage.ts";
 import { getRawLines, type RawLine } from "./getTextLines.ts";
 import { IdentifyHeaders, type HeaderIdProvider } from "./identifyHeaders.ts";
 import { columnBoxes } from "./multiColumn.ts";
-import type { MarkdownOptions, PageContext, Span, LinkInfo } from "./types.ts";
+import { extractDrawings } from "./drawingDevice.ts";
+import { findTables } from "./tableFinder.ts";
+import type { MarkdownOptions, PageContext, Span, LinkInfo, TableData } from "./types.ts";
 
 interface PageParams {
   page: mupdf.PDFPage;
@@ -23,6 +25,7 @@ interface PageParams {
   written_images: Set<number>;
   line_rects: Rect[];
   blocks: ReturnType<typeof extractTextDict>["blocks"];
+  tabs: TableData[];
 }
 
 function resolveLinks(links: LinkInfo[], span: Span): string | null {
@@ -83,6 +86,25 @@ function writeText(
 
   for (const { rect: lrect, spans } of nlines) {
     if (!outsideAllBboxes(lrect, parms.img_rects)) continue;
+
+    // Emit any tables that sit above this text line and overlap horizontally.
+    if (opts.tables) {
+      const tabCandidates: number[] = [];
+      for (const [i, tab_rect] of parms.tab_rects) {
+        if (parms.written_tables.has(i)) continue;
+        if (tab_rect.y1 > lrect.y0) continue;
+        const horizOverlap =
+          (lrect.x0 <= tab_rect.x0 && tab_rect.x0 < lrect.x1) ||
+          (lrect.x0 < tab_rect.x1 && tab_rect.x1 <= lrect.x1) ||
+          (tab_rect.x0 <= lrect.x0 && lrect.x1 <= tab_rect.x1);
+        if (horizOverlap) tabCandidates.push(i);
+      }
+      for (const i of tabCandidates) {
+        out += "\n" + parms.tabs[i]!.to_markdown(false) + "\n";
+        parms.written_tables.add(i);
+        prev_hdr_string = null;
+      }
+    }
 
     parms.line_rects.push(lrect);
     if (parms.line_rects.length > 1) {
@@ -326,6 +348,24 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
     const links = getLinks(page);
     const td = extractTextDict(page, {});
 
+    // Tables via lines_strict drawings device
+    let tabs: TableData[] = [];
+    let tab_rects = new Map<number, Rect>();
+    let tab_rects0: Rect[] = [];
+    if (opts.tableStrategy !== null) {
+      try {
+        const { paths } = extractDrawings(page);
+        tabs = findTables(td.blocks, paths, clip);
+        tabs.forEach((t, i) => {
+          const r = Rect.from(t.bbox).union(t.header.bbox);
+          tab_rects.set(i, r);
+          tab_rects0.push(r);
+        });
+      } catch (e) {
+        // tolerate failures; tables remain empty
+      }
+    }
+
     const parms: PageParams = {
       page,
       pageNumber: pno,
@@ -334,13 +374,14 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
       clip,
       accept_invisible: opts.ignoreAlpha ?? false,
       links,
-      tab_rects: new Map(),
-      tab_rects0: [],
+      tab_rects,
+      tab_rects0,
       img_rects: [],
       written_tables: new Set(),
       written_images: new Set(),
       line_rects: [],
       blocks: td.blocks,
+      tabs,
     };
 
     const pageCtx: PageContext = { number: pno, rect: pageRect };
@@ -363,6 +404,13 @@ export function toMarkdown(doc: mupdf.PDFDocument, opts: MarkdownOptions = {}): 
     }
 
     parms.md_string = parms.md_string.replace(/ ,/g, ",").replace(/-\n/g, "");
+
+    // emit any remaining tables (those not picked up above a text block)
+    for (const [i, _r] of parms.tab_rects) {
+      if (parms.written_tables.has(i)) continue;
+      parms.md_string += parms.tabs[i]!.to_markdown(false) + "\n";
+      parms.written_tables.add(i);
+    }
 
     while (parms.md_string.startsWith("\n")) parms.md_string = parms.md_string.slice(1);
     parms.md_string = parms.md_string.replaceAll("\x00", REPLACEMENT_CHARACTER);
