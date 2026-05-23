@@ -55,9 +55,9 @@ entry point.
 
 ## Page rotation
 
-| Key              | Type      | Default | Notes                                             |
-| ---------------- | --------- | ------- | ------------------------------------------------- |
-| `removeRotation` | `boolean` | `true`  | Strip `/Rotate` before processing, restore after. |
+| Key              | Type      | Default | Notes                                                                                        |
+| ---------------- | --------- | ------- | -------------------------------------------------------------------------------------------- |
+| `removeRotation` | `boolean` | `true`  | Derotate the page (visual-preserving) before processing, like PyMuPDF's `remove_rotation()`. |
 
 ## Filtering
 

@@ -2,9 +2,10 @@
 
 ## What matches `pymupdf4llm.to_markdown` byte-for-byte today
 
-Byte-for-byte parity is asserted by `tests/parity.test.ts` on a set of
-synthetic fixtures (single / multi-column text, headers, bullets,
-ruled table). The following features are exercised there:
+Byte-for-byte parity is asserted by the `synthetic fixtures` block in
+`tests/fixtures.test.ts` on a set of generated PDFs (single /
+multi-column text, headers, bullets, ruled table, wrapped-cell table).
+The following features are exercised there:
 
 - single- and multi-column text layout (port of `multi_column.column_boxes`)
 - header levels via `IdentifyHeaders` (font-size frequency) and
@@ -45,16 +46,17 @@ for a recipe.
 
 ## Known parity gaps (soft)
 
-Surfaced by the real-world fixtures in
-[`tests/realFixtures.test.ts`](https://github.com/iamnalinor/mupdf4llm/blob/main/tests/realFixtures.test.ts):
+Surfaced by the `vendored fixtures` block in
+[`tests/fixtures.test.ts`](https://github.com/iamnalinor/mupdf4llm/blob/main/tests/fixtures.test.ts):
 
-| Fixture                      | Mode    | Gap                                                                                   |
-| ---------------------------- | ------- | ------------------------------------------------------------------------------------- |
-| `pdflatex-forms.pdf`         | exact   | none — byte-identical                                                                 |
-| `pdflatex-4-pages.pdf`       | similar | en-dash → "- " bullet substitution doesn't fire (span-grouping difference vs PyMuPDF) |
-| `pdflatex-outline.pdf`       | similar | same en-dash divergence                                                               |
-| `multicolumn.pdf`            | similar | late-page table groups columns differently                                            |
-| `cropped-rotated-scaled.pdf` | smoke   | TS unrotates by default → ~10× more content; intentional                              |
+| Fixture                              | Mode    | Gap                                                                                    |
+| ------------------------------------ | ------- | -------------------------------------------------------------------------------------- |
+| `pdflatex-forms.pdf`                 | exact   | none — byte-identical                                                                  |
+| `pdflatex-4-pages.pdf`               | similar | en-dash → "- " bullet substitution doesn't fire (span-grouping difference vs PyMuPDF)  |
+| `pdflatex-outline.pdf`               | similar | same en-dash divergence                                                                |
+| `multicolumn.pdf`                    | similar | late-page table groups columns differently                                             |
+| `cropped-rotated-scaled.pdf`         | smoke   | cropped + scaled content; `mupdf` recovers less than PyMuPDF on this pathological file |
+| `nics-background-checks-2015-11.pdf` | smoke   | rotated multi-line table; column-boundary detection still diverges                     |
 
 ### Span grouping
 

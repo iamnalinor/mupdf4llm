@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bold. Upstream `pymupdf.Table.to_markdown` takes header text from plain
   `header.names`; the port now renders row 0 plain and rewrites internal
   newlines to `<br>` for the markdown layout.
+- `removeRotation` (default `true`) now performs a visual-preserving
+  derotation — prepending a derotation matrix to the content stream and
+  swapping the MediaBox for 90°/270° pages — faithfully porting PyMuPDF's
+  `page.remove_rotation()`. Previously it only cleared the `/Rotate` flag,
+  which transposed the rows and columns of every table on a quarter-turned
+  page (e.g. landscape financial disclosures). The rotation is no longer
+  restored afterwards since the in-memory document is never written back.
 
 ### Tests
 

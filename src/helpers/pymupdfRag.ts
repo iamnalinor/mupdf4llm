@@ -8,7 +8,7 @@ import { IdentifyHeaders, type HeaderIdProvider } from "./text/identifyHeaders";
 import { columnBoxes } from "./layout/multiColumn";
 import { extractDrawings } from "./tables/drawingDevice";
 import { findTables } from "./tables/tableFinder";
-import { removeRotation, setPageRotation } from "./layout/pageRotation";
+import { removeRotation } from "./layout/pageRotation";
 import { ProgressBar } from "./progress";
 import { renderPageImage, dedupeImages } from "./images/imageExtract";
 import { extractWords } from "./text/extractWords";
@@ -378,9 +378,12 @@ export function toMarkdown(
     : pages;
 
   for (const pno of pageIter) {
-    const page = doc.loadPage(pno) as mupdf.PDFPage;
+    let page = doc.loadPage(pno) as mupdf.PDFPage;
     const prevRotation = shouldRemoveRotation ? removeRotation(doc, page) : 0;
-    try {
+    // remove_rotation bakes a derotation matrix into the content stream and
+    // swaps the MediaBox; reload so getBounds() reflects the new page box.
+    if (prevRotation !== 0) page = doc.loadPage(pno) as mupdf.PDFPage;
+    {
       const rectBounds = page.getBounds();
       const pageRect = new Rect(rectBounds[0], rectBounds[1], rectBounds[2], rectBounds[3]);
       const [left, top, right, bottom] = margins;
@@ -532,11 +535,11 @@ export function toMarkdown(
       } else {
         document_output.push(parms.md_string);
       }
-    } finally {
-      if (shouldRemoveRotation && prevRotation !== 0) {
-        setPageRotation(doc, page, prevRotation);
-      }
     }
+    // No rotation restore: remove_rotation bakes the derotation into the
+    // content stream, so re-adding /Rotate would double-rotate. The document
+    // is loaded from an in-memory buffer and never written back, so the input
+    // file on disk is untouched regardless.
   }
 
   if (pageChunks) return chunk_output;
