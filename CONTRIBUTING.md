@@ -66,19 +66,19 @@ src/
   ocr/
     README.md               why no OCR + tesseract.js recipe
 tests/
-  parity.test.ts            synthetic PyMuPDF-generated fixtures, exact parity
-  realFixtures.test.ts      real PDFs from py-pdf/sample-files, tiered parity
+  fixtures.test.ts          synthetic (exact) + vendored (tiered) parity fixtures
   units.test.ts             unit tests for utils, geometry, progress, headers
-  fixtures/                 vendored real-world PDFs (MIT)
+  fixtures/                 vendored real-world PDFs (public domain / MIT)
 docs/                       VitePress + TypeDoc documentation site
 scripts/
   probe.ts / probe.py       manual diff helpers
 ```
 
 Every public function should keep parity with its Python counterpart;
-when in doubt, add a fixture in `tests/parity.test.ts` (synthetic) or
-`tests/realFixtures.test.ts` (vendored) and assert strict equality
-against `pymupdf4llm.to_markdown`.
+when in doubt, add a fixture to `tests/fixtures.test.ts` — the
+`synthetic` block for a generated PDF asserted exactly against
+`pymupdf4llm.to_markdown`, or the `vendored` block for a real PDF at the
+`exact` / `similar` / `smoke` tier.
 
 ## Adding a feature
 
@@ -87,8 +87,8 @@ against `pymupdf4llm.to_markdown`.
    concerns). Keep the file focused — a single feature per module.
 2. Export the public surface via `src/index.ts`.
 3. Add a unit test in `tests/units.test.ts` if it's small and pure.
-   Add a parity fixture in `tests/parity.test.ts` if it touches the
-   markdown rendering path and you want byte-for-byte parity.
+   Add a fixture to the `synthetic` block of `tests/fixtures.test.ts`
+   if it touches the markdown rendering path and you want exact parity.
 4. Update the relevant guide page under `docs/guide/` (or add one).
 5. Run `bun run lint` to format, `bun test` to verify, `bun run docs:build`
    to confirm the docs site still builds.
@@ -114,7 +114,7 @@ Documentation is built with [VitePress](https://vitepress.dev/) +
 1. `bun install --frozen-lockfile`
 2. `bun run lint:check` — Prettier + ESLint + tsc
 3. `bun run docs:build` — smoke-test the docs site
-4. `bun test` — 15 tests
+4. `bun test` — unit + parity suite
 5. `bun run build` — emit dist artifacts
 6. `npm pack --dry-run` — verify the published tarball
 

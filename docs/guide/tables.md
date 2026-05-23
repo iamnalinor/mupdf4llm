@@ -69,4 +69,22 @@ for (const c of chunks) {
 ## Cells inside markdown
 
 Each detected table is rendered as a GitHub-flavored markdown table.
-Newlines inside a cell become `<br>` (MD-safe).
+
+- **Wrapped cells.** When a cell's text wraps across several visual
+  lines, the lines are joined with `<br>` (MD-safe). Cell membership is
+  decided per character — a glyph belongs to a cell only when its
+  bounding box overlaps the cell by more than 50% of its own area
+  (matching `pymupdf.table.extract_cells`). This prevents a span that
+  grazes a row boundary from being duplicated into both neighbouring
+  rows.
+- **Header row.** The first row is rendered as plain text, mirroring
+  upstream `Table.to_markdown`, which takes header text from the plain
+  `header.names` rather than the markdown-styled cell path. Inline
+  `**bold**` / `_italic_` styling is applied only to body cells.
+
+## Rotated pages
+
+Tables on pages with a `/Rotate` of 90° or 270° are extracted correctly
+because the page is derotated (visual-preserving) before detection — see
+[Page rotation](/guide/page-rotation). Without that step the rows and
+columns of the table would be transposed.

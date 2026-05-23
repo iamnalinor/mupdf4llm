@@ -10,11 +10,11 @@ TypeScript/Bun port of
 [`mupdf`](https://www.npmjs.com/package/mupdf) WASM package. Converts
 PDFs into LLM-ready Markdown with reading-order text, headers, bullets,
 inline styling (bold, italic, monospaced), tables, images, and
-per-word coordinates. Byte-for-byte parity with
-`pymupdf4llm.to_markdown(doc)` on the synthetic fixtures in
-`tests/parity.test.ts`; the
+per-word coordinates. It tracks `pymupdf4llm.to_markdown(doc)` closely —
+a set of synthetic fixtures match exactly, but real-world PDFs can
+diverge; the
 [parity & limits guide](https://iamnalinor.github.io/mupdf4llm/guide/parity-and-limits)
-lists what diverges on real-world PDFs and why.
+documents what differs and why.
 
 **📖 Full documentation: [iamnalinor.github.io/mupdf4llm](https://iamnalinor.github.io/mupdf4llm/)**
 
@@ -80,7 +80,7 @@ Detailed write-up: [parity and limits](https://iamnalinor.github.io/mupdf4llm/gu
 ```sh
 bun install
 pip install pymupdf4llm   # required for the parity test suite
-bun test                  # 15 parity + unit tests
+bun test                  # parity + unit tests
 bun run lint              # prettier --write + eslint + tsc
 bun run docs:dev          # local doc preview at http://localhost:5173
 bun run build             # emits dist/{index,llama}.{js,cjs,d.ts}

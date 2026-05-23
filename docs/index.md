@@ -4,7 +4,7 @@ layout: home
 hero:
   name: mupdf4llm
   text: PDFs → LLM-ready Markdown
-  tagline: TypeScript port of pymupdf4llm on top of the official mupdf WASM package. Byte-for-byte parity with the Python upstream on the supported feature set.
+  tagline: TypeScript port of pymupdf4llm on top of the official mupdf WASM package. Tracks the Python upstream closely — exact on synthetic fixtures, with documented divergences on real-world PDFs.
   actions:
     - theme: brand
       text: Get started
