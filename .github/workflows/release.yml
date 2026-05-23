@@ -2,18 +2,40 @@ name: Release
 
 on:
   push:
-    tags: ["v*.*.*"]
+    branches: ["main"]
+    paths: ["package.json"]
 
 jobs:
-  publish:
+  check-version:
     runs-on: ubuntu-latest
-    # id-token: write enables Trusted Publishing — npm authenticates via OIDC,
-    # no NPM_TOKEN secret is required. The package on npmjs.com must already
-    # exist and have GitHub Actions configured as a trusted publisher
-    # (Settings → Publishing access → Trusted publishers).
+    outputs:
+      changed: ${{ steps.check.outputs.changed }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check if version field changed
+        id: check
+        run: |
+          PREV=$(git show HEAD^:package.json | jq -r '.version')
+          CURR=$(jq -r '.version' package.json)
+          echo "Previous version: $PREV, new version: $CURR"
+          if [ "$PREV" != "$CURR" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "version=$CURR" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
     permissions:
-      contents: read
-      id-token: write
+      contents: write # needed to push the git tag
+      id-token: write # enables OIDC Trusted Publishing — no NPM_TOKEN required
     steps:
       - uses: actions/checkout@v4
 
@@ -48,6 +70,13 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      - name: Tag release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ needs.check-version.outputs.version }}"
+          git push origin "v${{ needs.check-version.outputs.version }}"
 
       - name: Publish to npm (Trusted Publishing)
         run: npm publish --provenance --access public

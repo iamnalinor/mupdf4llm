@@ -1,6 +1,6 @@
 {
   "name": "@nalinor/mupdf4llm",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "TypeScript port of pymupdf4llm — convert PDFs to LLM-ready Markdown using the mupdf WASM package.",
   "keywords": [
     "pdf",
