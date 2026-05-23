@@ -118,63 +118,6 @@ Documentation is built with [VitePress](https://vitepress.dev/) +
 5. `bun run build` — emit dist artifacts
 6. `npm pack --dry-run` — verify the published tarball
 
-## Releasing to npm
-
-`release.yml` uses [Trusted Publishing](https://docs.npmjs.com/trusted-publishers)
-— GitHub Actions authenticates to npm over OIDC, no long-lived
-`NPM_TOKEN` is involved. The package must exist on npm and have
-GitHub Actions configured as a trusted publisher before any automated
-release can succeed.
-
-### One-time setup
-
-1. **Bootstrap the package on npm.** Trusted Publishing can only be
-   attached to a package that already exists, so the very first
-   publish is done locally:
-
-   ```sh
-   npm login                       # interactive 2FA via browser
-   bun run build
-   npm publish --access public     # no --provenance — local box has no OIDC
-   ```
-
-2. **Wire up Trusted Publishing.** On npmjs.com → the package's page →
-   **Settings → Publishing access → Trusted publishers → Add trusted
-   publisher → GitHub Actions**, and fill in:
-   - Organization or user: `iamnalinor`
-   - Repository: `mupdf4llm`
-   - Workflow filename: `release.yml`
-   - Environment name: _(leave empty unless you also add a GitHub
-     Environment with required reviewers — see below)_
-
-3. _(Optional)_ If you want a manual approval gate before each
-   publish, create a GitHub Environment named `npm-publish` with
-   protection rules and add `environment: npm-publish` to the
-   `publish` job in `release.yml`. The npm trusted-publisher
-   configuration must list the same environment name.
-
-### Per release
-
-```sh
-npm version patch          # or minor / major — commits + creates a tag
-git push && git push --tags
-```
-
-The `v*.*.*` tag triggers `.github/workflows/release.yml`, which:
-
-1. Installs Bun, Node 24+ (for npm 11), and Python 3.11.
-2. Upgrades npm globally to the latest (Trusted Publishing needs
-   ≥ 11.5.1).
-3. Runs `bun run lint:check && bun test && bun run build`.
-4. Calls `npm publish --provenance --access public`. The npm CLI
-   detects the OIDC token from GitHub Actions automatically — no env
-   variables to set.
-
-If the workflow fails at the publish step with an OIDC error, the
-most common cause is the trusted-publisher row on npmjs.com not
-matching the GitHub repository / workflow filename / environment.
-Re-check those fields verbatim.
-
 ## License
 
 By contributing you agree that your contributions are licensed under
