@@ -1,6 +1,11 @@
 import type { Rect, BBox } from "./geometry";
 import type { Word } from "./text/extractWords";
 
+export interface CharBBox {
+  c: string;
+  bbox: BBox;
+}
+
 export interface Span {
   bbox: Rect;
   text: string;
@@ -13,6 +18,8 @@ export interface Span {
   ascender: number;
   descender: number;
   origin: [number, number];
+  /** Per-character bboxes; used by table cell extraction for >50% area-overlap filtering. */
+  chars: CharBBox[];
   // injected by getRawLines
   line?: number;
   block?: number;

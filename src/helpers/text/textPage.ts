@@ -119,6 +119,7 @@ function buildSpan(chars: CharData[]): Span {
     ascender: 0.8,
     descender: -0.2,
     origin: first.origin,
+    chars: chars.map((c) => ({ c: c.c, bbox: c.bbox })),
   };
 }
 
