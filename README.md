@@ -1,6 +1,6 @@
 # mupdf4llm
 
-[![npm](https://img.shields.io/npm/v/mupdf4llm.svg)](https://www.npmjs.com/package/mupdf4llm)
+[![npm](https://img.shields.io/npm/v/%40nalinor%2Fmupdf4llm.svg)](https://www.npmjs.com/package/@nalinor/mupdf4llm)
 [![CI](https://github.com/iamnalinor/mupdf4llm/actions/workflows/ci.yml/badge.svg)](https://github.com/iamnalinor/mupdf4llm/actions/workflows/ci.yml)
 [![Docs](https://github.com/iamnalinor/mupdf4llm/actions/workflows/docs.yml/badge.svg)](https://iamnalinor.github.io/mupdf4llm/)
 [![License: AGPL v3](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
