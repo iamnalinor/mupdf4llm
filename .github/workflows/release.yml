@@ -34,8 +34,8 @@ jobs:
     if: needs.check-version.outputs.changed == 'true'
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # needed to push the git tag
-      id-token: write  # enables OIDC Trusted Publishing — no NPM_TOKEN required
+      contents: write # needed to push the git tag
+      id-token: write # enables OIDC Trusted Publishing — no NPM_TOKEN required
     steps:
       - uses: actions/checkout@v4
 
