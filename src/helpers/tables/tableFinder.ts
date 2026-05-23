@@ -153,6 +153,34 @@ function spanStyling(spans: Span[]): {
   return { bold, italic, mono };
 }
 
+const WHITESPACE_RE = /\s/;
+
+/**
+ * Per-character cell membership: a char belongs to the cell when its bbox area
+ * overlaps the cell by >50% of the char's own area. Whitespace chars whose bbox
+ * is mostly outside degrade to a single space. Mirrors upstream
+ * pymupdf/table.py:extract_cells (1.27.2.3) — without this gate, wrapped text
+ * whose span bbox grazes a row boundary gets pulled into both adjacent cells.
+ */
+function charsInCell(span: Span, cell: Rect): string {
+  let out = "";
+  for (const ch of span.chars) {
+    const cb = ch.bbox;
+    const ix0 = Math.max(cb[0], cell.x0);
+    const iy0 = Math.max(cb[1], cell.y0);
+    const ix1 = Math.min(cb[2], cell.x1);
+    const iy1 = Math.min(cb[3], cell.y1);
+    const interArea = Math.max(0, ix1 - ix0) * Math.max(0, iy1 - iy0);
+    const charArea = Math.max(0, cb[2] - cb[0]) * Math.max(0, cb[3] - cb[1]);
+    if (interArea > 0.5 * charArea) {
+      out += ch.c;
+    } else if (WHITESPACE_RE.test(ch.c)) {
+      out += " ";
+    }
+  }
+  return out;
+}
+
 /** Extract markdown-styled text from a rect. */
 function extractCellText(blocks: Block[], cell: Rect, markdown: boolean): string {
   let text = "";
@@ -164,13 +192,13 @@ function extractCellText(blocks: Block[], cell: Rect, markdown: boolean): string
       if (text) text += markdown ? "<br>" : "\n";
       for (const span of line.spans) {
         if (areDisjoint(span.bbox, cell)) continue;
-        let st = span.text;
+        let st = charsInCell(span, cell);
         if (!st) continue;
+        if (st.length > 2) st = st.replace(/\s+$/, "");
         if (!markdown) {
           text += st;
           continue;
         }
-        st = st.length > 2 ? st.replace(/\s+$/, "") : st;
         const { bold, italic, mono } = spanStyling([span]);
         let prefix = "",
           suffix = "";
@@ -188,8 +216,10 @@ function extractCellText(blocks: Block[], cell: Rect, markdown: boolean): string
         }
         if (!st.trim()) {
           text += " ";
+        } else if (suffix && text.endsWith(suffix)) {
+          text = text.slice(0, -suffix.length) + st + suffix;
         } else {
-          text += prefix + st.trim() + suffix;
+          text += prefix + st + suffix;
         }
       }
     }
@@ -238,9 +268,15 @@ class Table implements TableData {
     const grid: string[][] = [];
     for (let r = 0; r < this.row_count; r++) {
       const row: string[] = [];
+      // Header row (row 0) is rendered plain — matches upstream Python where
+      // header.names comes from Table.extract() (plain text), only body rows
+      // go through extract_cells(..., markdown=True). Newlines inside a header
+      // cell are still rewritten to <br> for the markdown table layout.
+      const markdown = r !== 0;
       for (let c = 0; c < this.col_count; c++) {
         const cell = this.cells[r]![c];
-        row.push(cell ? extractCellText(this.blocks, Rect.from(cell), true) : "");
+        const txt = cell ? extractCellText(this.blocks, Rect.from(cell), markdown) : "";
+        row.push(markdown ? txt : txt.replace(/\n/g, "<br>"));
       }
       grid.push(row);
     }

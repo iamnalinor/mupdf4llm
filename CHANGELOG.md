@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Table cells whose text wraps across multiple visual lines no longer duplicate
+  the trailing line or leak it into the neighbouring cell. `extractCellText`
+  now filters by per-character bbox >50% overlap with the cell rectangle
+  (matching `pymupdf.table.extract_cells` 1.27.2.3), and coalesces consecutive
+  same-style spans the way upstream does.
+- Header row of a rendered table is no longer wrapped in `**…**` markdown
+  bold. Upstream `pymupdf.Table.to_markdown` takes header text from plain
+  `header.names`; the port now renders row 0 plain and rewrites internal
+  newlines to `<br>` for the markdown layout.
+- `removeRotation` (default `true`) now performs a visual-preserving
+  derotation — prepending a derotation matrix to the content stream and
+  swapping the MediaBox for 90°/270° pages — faithfully porting PyMuPDF's
+  `page.remove_rotation()`. Previously it only cleared the `/Rotate` flag,
+  which transposed the rows and columns of every table on a quarter-turned
+  page (e.g. landscape financial disclosures). The rotation is no longer
+  restored afterwards since the in-memory document is never written back.
+
+### Tests
+
+- `tests/parity.test.ts` + `tests/realFixtures.test.ts` merged into
+  `tests/fixtures.test.ts` (`synthetic` + `vendored` describe blocks).
+- New synthetic `tableWrapped.pdf` parity fixture exercises wrapped cells +
+  plain headers byte-for-byte against `pymupdf4llm`.
+- Vendored `nics-background-checks-2015-11.pdf` (FBI, US gov public domain
+  via 17 USC §105) at `smoke` mode — a real document with heavy multi-line
+  cell content.
+
 ## [0.1.0] - 2026-05-22
 
 First release. TypeScript/Bun port of

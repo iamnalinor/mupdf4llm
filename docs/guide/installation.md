@@ -39,13 +39,14 @@ npm i llamaindex
 ```
 
 Without `llamaindex`, the adapter still loads — it just returns plain
-`{ text, extra_info }` objects with the same shape as a LlamaIndex
-`Document`.
+`{ text, metadata }` objects with the same shape as a LlamaIndex
+`Document` (the metadata field is always `metadata`, never
+`extra_info`).
 
 ## Optional: parity tests
 
-To run the byte-for-byte parity suite locally you also need Python
-with `pymupdf4llm`:
+To run the parity suite locally you also need Python with
+`pymupdf4llm`:
 
 ```sh
 pip install pymupdf4llm

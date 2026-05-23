@@ -1,10 +1,15 @@
 # Page rotation
 
 PDFs can carry a `/Rotate` entry (0, 90, 180, 270) on each page. By
-default `mupdf4llm` strips it before processing and restores it
-afterwards — that matches PyMuPDF's `page.remove_rotation()` flow and
-keeps text extraction consistent across landscape / portrait
-orientations.
+default `mupdf4llm` removes it before processing — a faithful port of
+PyMuPDF's `page.remove_rotation()`, which upstream `pymupdf4llm` calls on
+every page.
+
+Crucially, removing rotation **preserves the visual appearance**: a
+derotation matrix is prepended to the page content stream and the
+MediaBox is swapped for 90°/270° pages. Simply clearing the `/Rotate`
+flag would leave content in the page's raw authoring orientation, which
+transposes the rows and columns of any table on a quarter-turned page.
 
 ## Default behaviour
 
@@ -12,8 +17,8 @@ orientations.
 toMarkdown(buf); // removeRotation: true by default
 ```
 
-The original `/Rotate` value is restored after each page is processed,
-so the input document is not mutated on disk.
+The document is loaded from an in-memory buffer and never written back,
+so the input file on disk is untouched.
 
 ## Opt out
 
@@ -41,7 +46,7 @@ involved.
 
 ## Trade-off
 
-`removeRotation: true` is closer to PyMuPDF parity, but for documents
-where the rotation is meaningful (e.g. a fold-out poster page in
-landscape, deliberately rotated by the author), turning it off may
-produce a better reading order.
+`removeRotation: true` matches PyMuPDF parity and keeps tables on
+rotated pages correctly oriented. Turning it off skips the content
+rewrite entirely; `mupdf` then extracts in display space, which is
+usually fine for upright pages but is not what upstream does.
