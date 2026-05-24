@@ -8,7 +8,7 @@ options.
 Returns a single Markdown string for the whole document.
 
 ```ts
-import { toMarkdown } from "mupdf4llm";
+import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync } from "node:fs";
 
 const md = toMarkdown(readFileSync("paper.pdf"));
@@ -33,7 +33,7 @@ Returns one record per page. Useful for chunked RAG, where you want
 each chunk to carry the page number / TOC items as metadata.
 
 ```ts
-import { toMarkdownPages } from "mupdf4llm";
+import { toMarkdownPages } from "@nalinor/mupdf4llm";
 
 const chunks = toMarkdownPages(readFileSync("paper.pdf"));
 for (const c of chunks) {

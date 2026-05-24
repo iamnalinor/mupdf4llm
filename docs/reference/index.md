@@ -11,8 +11,8 @@ detail not covered by the public API contract.
 
 | Subpath           | Source                                                                                                               | Description                                                  |
 | ----------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `mupdf4llm`       | [`src/index.ts`](https://github.com/iamnalinor/mupdf4llm/blob/main/src/index.ts)                                     | Main API: `toMarkdown`, `toMarkdownPages`, types and helpers |
-| `mupdf4llm/llama` | [`src/llama/pdfMarkdownReader.ts`](https://github.com/iamnalinor/mupdf4llm/blob/main/src/llama/pdfMarkdownReader.ts) | LlamaIndex adapter (`PDFMarkdownReader`)                     |
+| `@nalinor/mupdf4llm`       | [`src/index.ts`](https://github.com/iamnalinor/mupdf4llm/blob/main/src/index.ts)                                     | Main API: `toMarkdown`, `toMarkdownPages`, types and helpers |
+| `@nalinor/mupdf4llm/llama` | [`src/llama/pdfMarkdownReader.ts`](https://github.com/iamnalinor/mupdf4llm/blob/main/src/llama/pdfMarkdownReader.ts) | LlamaIndex adapter (`PDFMarkdownReader`)                     |
 
 ## Generated index
 

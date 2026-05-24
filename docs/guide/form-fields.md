@@ -8,7 +8,7 @@ signatures) are extracted with `getKeyValues`. Mirrors
 
 ```ts
 import * as mupdf from "mupdf";
-import { getKeyValues } from "mupdf4llm";
+import { getKeyValues } from "@nalinor/mupdf4llm";
 
 const doc = mupdf.PDFDocument.openDocument(buf, "application/pdf");
 const fields = getKeyValues(doc);

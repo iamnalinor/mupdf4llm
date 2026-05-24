@@ -1,6 +1,6 @@
 # Getting started
 
-`mupdf4llm` is a TypeScript port of the classic
+`@nalinor/mupdf4llm` is a TypeScript port of the classic
 [`pymupdf4llm.to_markdown`](https://github.com/pymupdf/RAG) pipeline. It
 takes PDF bytes and returns LLM-friendly Markdown with reading-order
 text, headings, bullets, inline styling, and tables.

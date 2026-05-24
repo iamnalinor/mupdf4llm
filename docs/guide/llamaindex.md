@@ -1,7 +1,7 @@
 # LlamaIndex adapter
 
-`mupdf4llm` ships a [LlamaIndex](https://ts.llamaindex.ai/) reader at
-the `mupdf4llm/llama` subpath export — a one-for-one port of
+`@nalinor/mupdf4llm` ships a [LlamaIndex](https://ts.llamaindex.ai/) reader at
+the `@nalinor/mupdf4llm/llama` subpath export — a one-for-one port of
 `pymupdf4llm.llama.PDFMarkdownReader`.
 
 ## Setup
@@ -21,7 +21,7 @@ without branching on whether `llamaindex` is installed.
 ## Usage
 
 ```ts
-import { PDFMarkdownReader } from "mupdf4llm/llama";
+import { PDFMarkdownReader } from "@nalinor/mupdf4llm/llama";
 
 const reader = new PDFMarkdownReader();
 const docs = await reader.loadData("paper.pdf");

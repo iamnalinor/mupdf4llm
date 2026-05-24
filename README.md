@@ -21,9 +21,9 @@ documents what differs and why.
 ## Install
 
 ```sh
-npm i mupdf4llm
+npm i @nalinor/mupdf4llm
 # or
-bun add mupdf4llm
+bun add @nalinor/mupdf4llm
 ```
 
 Requires Node 20+ or Bun ≥ 1.0. The only runtime dependency is `mupdf`
@@ -32,7 +32,7 @@ Requires Node 20+ or Bun ≥ 1.0. The only runtime dependency is `mupdf`
 ## Quick start
 
 ```ts
-import { toMarkdown } from "mupdf4llm";
+import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync } from "node:fs";
 
 const md = toMarkdown(readFileSync("paper.pdf"));
@@ -42,7 +42,7 @@ console.log(md);
 Per-page chunks for RAG:
 
 ```ts
-import { toMarkdownPages } from "mupdf4llm";
+import { toMarkdownPages } from "@nalinor/mupdf4llm";
 
 const chunks = toMarkdownPages(readFileSync("paper.pdf"), {
   extractWords: true,
@@ -62,7 +62,7 @@ LlamaIndex adapter.
 - Per-word coordinates (`extractWords`)
 - Form-field extraction (`getKeyValues`)
 - Page rotation handling
-- LlamaIndex adapter at the `mupdf4llm/llama` subpath
+- LlamaIndex adapter at the `@nalinor/mupdf4llm/llama` subpath
 
 ## What's NOT available (and why)
 

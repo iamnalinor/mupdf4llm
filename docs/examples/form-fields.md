@@ -4,7 +4,7 @@ Pull every AcroForm widget out of a filled-out PDF.
 
 ```ts
 import * as mupdf from "mupdf";
-import { getKeyValues } from "mupdf4llm";
+import { getKeyValues } from "@nalinor/mupdf4llm";
 import { readFileSync } from "node:fs";
 
 const buf = readFileSync("application.pdf");
@@ -37,7 +37,7 @@ const onPageZero = fields.filter((f) => f.page === 0);
 If you want both the text and the form values in one shot:
 
 ```ts
-import { toMarkdown, getKeyValues } from "mupdf4llm";
+import { toMarkdown, getKeyValues } from "@nalinor/mupdf4llm";
 
 const md = toMarkdown(buf);
 const fields = getKeyValues(doc);

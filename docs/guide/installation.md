@@ -11,19 +11,19 @@
 ::: code-group
 
 ```sh [npm]
-npm i mupdf4llm
+npm i @nalinor/mupdf4llm
 ```
 
 ```sh [bun]
-bun add mupdf4llm
+bun add @nalinor/mupdf4llm
 ```
 
 ```sh [pnpm]
-pnpm add mupdf4llm
+pnpm add @nalinor/mupdf4llm
 ```
 
 ```sh [yarn]
-yarn add mupdf4llm
+yarn add @nalinor/mupdf4llm
 ```
 
 :::
@@ -59,7 +59,7 @@ contribute to the library itself.
 ## Verify
 
 ```ts
-import { toMarkdown } from "mupdf4llm";
+import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync } from "node:fs";
 
 const md = toMarkdown(readFileSync("any.pdf"));

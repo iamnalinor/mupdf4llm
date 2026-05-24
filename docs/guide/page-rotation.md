@@ -1,7 +1,7 @@
 # Page rotation
 
 PDFs can carry a `/Rotate` entry (0, 90, 180, 270) on each page. By
-default `mupdf4llm` removes it before processing — a faithful port of
+default `@nalinor/mupdf4llm` removes it before processing — a faithful port of
 PyMuPDF's `page.remove_rotation()`, which upstream `pymupdf4llm` calls on
 every page.
 
@@ -34,7 +34,7 @@ toMarkdown(buf, { removeRotation: false });
 Three helpers are exported for advanced use:
 
 ```ts
-import { getPageRotation, setPageRotation, removeRotation } from "mupdf4llm";
+import { getPageRotation, setPageRotation, removeRotation } from "@nalinor/mupdf4llm";
 
 const before = getPageRotation(page); // 0 | 90 | 180 | 270
 setPageRotation(doc, page, 90);

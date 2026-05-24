@@ -67,7 +67,7 @@ export default defineConfig({
     },
     socialLinks: [
       { icon: "github", link: "https://github.com/iamnalinor/mupdf4llm" },
-      { icon: "npm", link: "https://www.npmjs.com/package/mupdf4llm" },
+      { icon: "npm", link: "https://www.npmjs.com/package/@nalinor/mupdf4llm" },
     ],
     editLink: {
       pattern: "https://github.com/iamnalinor/mupdf4llm/edit/main/docs/:path",

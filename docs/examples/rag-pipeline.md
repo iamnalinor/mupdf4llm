@@ -4,7 +4,7 @@ A minimal retrieval-augmented-generation indexing pass: PDF → per-page
 chunks → embeddings → vector store.
 
 ```ts
-import { toMarkdownPages } from "mupdf4llm";
+import { toMarkdownPages } from "@nalinor/mupdf4llm";
 import { readFileSync } from "node:fs";
 // pseudocode — swap in your embedding model & vector store of choice
 import { embed } from "./my-embeddings";

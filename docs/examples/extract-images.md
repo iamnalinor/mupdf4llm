@@ -3,7 +3,7 @@
 ## Save to disk and link from markdown
 
 ```ts
-import { toMarkdown } from "mupdf4llm";
+import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 
 mkdirSync("out/images", { recursive: true });
@@ -38,7 +38,7 @@ In page-chunks mode each `PageChunk.images` carries the bbox and the
 emitted ref:
 
 ```ts
-import { toMarkdownPages } from "mupdf4llm";
+import { toMarkdownPages } from "@nalinor/mupdf4llm";
 
 const chunks = toMarkdownPages(buf, {
   writeImages: true,
