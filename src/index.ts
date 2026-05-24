@@ -2,7 +2,13 @@ import * as mupdf from "mupdf";
 import { toMarkdown as ragToMarkdown } from "./helpers/pymupdfRag";
 import type { MarkdownOptions, PageChunk } from "./helpers/types";
 
-export type { MarkdownOptions, PageChunk, FormField, ImageInfo } from "./helpers/types";
+export type {
+  MarkdownOptions,
+  MarkdownElement,
+  PageChunk,
+  FormField,
+  ImageInfo,
+} from "./helpers/types";
 export { IdentifyHeaders, TocHeaders } from "./helpers/text/identifyHeaders";
 export { getKeyValues } from "./helpers/forms/formFields";
 export { extractWords, type Word } from "./helpers/text/extractWords";

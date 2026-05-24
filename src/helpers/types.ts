@@ -70,13 +70,21 @@ export interface ImageInfo {
   ref?: string;
 }
 
+/** Inline styling toggles applied when rendering table cells. */
+export interface CellStyle {
+  bold: boolean;
+  italic: boolean;
+  inlineCode: boolean;
+  lineBreak: boolean;
+}
+
 export interface TableData {
   bbox: BBox;
   header: { bbox: BBox; cells: (BBox | null)[]; external: boolean };
   cells: (BBox | null)[][];
   row_count: number;
   col_count: number;
-  to_markdown(clean?: boolean): string;
+  to_markdown(clean?: boolean, style?: CellStyle): string;
 }
 
 export interface FormField {
@@ -115,7 +123,29 @@ export interface MarkdownOptions {
   /** Accept invisible (alpha=0) text. Currently a no-op — mupdf.js's walker does not expose alpha. */
   ignoreAlpha?: boolean;
   removeRotation?: boolean;
+  /**
+   * Whitelist of markdown elements to emit. When omitted, ALL elements are
+   * emitted (backwards-compatible default). When provided, only the listed
+   * elements are produced; everything else falls back to plain text.
+   *
+   * Combines with the legacy toggles (`ignoreCode`, `hdrInfo: false`,
+   * `tableStrategy: null`, `writeImages`/`embedImages`): an element is emitted
+   * only if BOTH the whitelist allows it AND no legacy option disabled it.
+   */
+  elements?: MarkdownElement[];
 }
+
+export type MarkdownElement =
+  | "bold" // **...**
+  | "italic" // _..._
+  | "inlineCode" // `...` (monospaced span outside a code block)
+  | "codeBlock" // ``` ... ``` (monospaced lines)
+  | "header" // # ...
+  | "bulletList" // - ...
+  | "link" // [text](url)
+  | "table" // markdown tables
+  | "image" // ![](...)
+  | "lineBreak"; // <br> inside table cells
 
 export interface PageContext {
   number: number;

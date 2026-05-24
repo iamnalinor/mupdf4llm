@@ -12,7 +12,8 @@ import { ProgressBar } from "../src/helpers/progress";
 import { TocHeaders, IdentifyHeaders } from "../src/helpers/text/identifyHeaders";
 import { extractWords } from "../src/helpers/text/extractWords";
 import { getKeyValues } from "../src/helpers/forms/formFields";
-import { toMarkdownPages } from "../src/index";
+import { toMarkdown, toMarkdownPages } from "../src/index";
+import type { MarkdownElement } from "../src/index";
 import { PDFMarkdownReader } from "../src/llama/pdfMarkdownReader";
 
 function openFixture(name: string): mupdf.PDFDocument {
@@ -168,4 +169,62 @@ test("PDFMarkdownReader yields { text, metadata } regardless of llamaindex", asy
   // metadata must be the field name, not extra_info
   expect("metadata" in d).toBe(true);
   expect("extra_info" in d).toBe(false);
+});
+
+const ALL_ELEMENTS: MarkdownElement[] = [
+  "bold",
+  "italic",
+  "inlineCode",
+  "codeBlock",
+  "header",
+  "bulletList",
+  "link",
+  "table",
+  "image",
+  "lineBreak",
+];
+const without = (e: MarkdownElement): MarkdownElement[] => ALL_ELEMENTS.filter((x) => x !== e);
+const wordCount = (s: string) => (s.match(/\S+/g) ?? []).length;
+
+test("elements: omitting it is identical to the full whitelist", () => {
+  const buf = new Uint8Array(readFileSync("tests/fixtures/pdflatex-outline.pdf"));
+  expect(toMarkdown(buf, { elements: ALL_ELEMENTS })).toBe(toMarkdown(buf));
+});
+
+test("elements: [] strips all markup but keeps text", () => {
+  const buf = new Uint8Array(readFileSync("tests/fixtures/pdflatex-outline.pdf"));
+  const md = toMarkdown(buf, { elements: [] }) as string;
+  expect(md).not.toContain("**");
+  expect(md).not.toMatch(/^#/m);
+  expect(md).not.toContain("<br>");
+  expect(wordCount(md)).toBeGreaterThan(0);
+});
+
+test("elements: dropping 'bold' removes ** but keeps headers", () => {
+  const buf = new Uint8Array(readFileSync("tests/fixtures/pdflatex-outline.pdf"));
+  const full = toMarkdown(buf) as string;
+  expect(full).toContain("**"); // sanity: fixture has bold + headers
+  expect(full).toMatch(/^#/m);
+  const md = toMarkdown(buf, { elements: without("bold") }) as string;
+  expect(md).not.toContain("**");
+  expect(md).toMatch(/^#/m);
+});
+
+test("elements: dropping 'lineBreak' removes <br> while keeping tables", () => {
+  const buf = new Uint8Array(readFileSync("tests/fixtures/nics-background-checks-2015-11.pdf"));
+  const full = toMarkdown(buf) as string;
+  expect(full).toContain("<br>"); // sanity: fixture has wrapped cells
+  const md = toMarkdown(buf, { elements: without("lineBreak") }) as string;
+  expect(md).not.toContain("<br>");
+  expect(md).toMatch(/^\|/m); // tables still rendered
+});
+
+test("elements: dropping 'table' emits cell text as plain paragraphs, not lost", () => {
+  const buf = new Uint8Array(readFileSync("tests/fixtures/nics-background-checks-2015-11.pdf"));
+  const full = toMarkdown(buf) as string;
+  expect(full).toMatch(/^\|/m); // sanity: fixture is table-heavy
+  const md = toMarkdown(buf, { elements: without("table") }) as string;
+  expect(md).not.toMatch(/^\|/m); // no markdown table rows
+  // Table content must survive as plain text rather than disappearing.
+  expect(wordCount(md)).toBeGreaterThanOrEqual(wordCount(full));
 });
