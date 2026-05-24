@@ -16,7 +16,7 @@ The implementation is a tiny iterable wrapper — `pymupdf4llm`'s
 The class is exported, so you can wrap any iterable:
 
 ```ts
-import { ProgressBar } from "mupdf4llm";
+import { ProgressBar } from "@nalinor/mupdf4llm";
 
 for (const file of new ProgressBar(filesToProcess, { prefix: "pdfs " })) {
   await ingest(file);

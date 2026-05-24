@@ -19,7 +19,7 @@ The following features are exercised there:
 - form-field extraction via `getKeyValues`
 - per-word coordinates via `extractWords`
 - image extraction & embedding (`writeImages` / `embedImages`)
-- LlamaIndex adapter (`mupdf4llm/llama`)
+- LlamaIndex adapter (`@nalinor/mupdf4llm/llama`)
 
 ## Hard blockers — not available in this port
 
@@ -31,7 +31,7 @@ licensed under
 [Polyform Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/),
 incompatible with our AGPL distribution. There is no JS port of the
 model, and we can't legally repackage it. The corresponding entry
-points were removed from `mupdf4llm`'s public API in v0.1 — they used
+points were removed from `@nalinor/mupdf4llm`'s public API in v0.1 — they used
 to throw at runtime, which was misleading.
 
 ### OCR

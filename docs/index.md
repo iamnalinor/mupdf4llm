@@ -11,7 +11,7 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: View on npm
-      link: https://www.npmjs.com/package/mupdf4llm
+      link: https://www.npmjs.com/package/@nalinor/mupdf4llm
     - theme: alt
       text: GitHub
       link: https://github.com/iamnalinor/mupdf4llm
@@ -24,7 +24,7 @@ features:
   - title: Headers, tables, images, forms
     details: Font-size or TOC-driven headers, four table strategies, image extraction or base64 embedding, AcroForm field dump, per-word coordinates — all via the same `toMarkdown()` entry point.
   - title: LlamaIndex-ready
-    details: Optional `mupdf4llm/llama` subpath export ships a `PDFMarkdownReader` that yields one `Document` per page, with `llamaindex` as an optional peer dependency.
+    details: Optional `@nalinor/mupdf4llm/llama` subpath export ships a `PDFMarkdownReader` that yields one `Document` per page, with `llamaindex` as an optional peer dependency.
 ---
 
 ## Why a TS port?
@@ -40,15 +40,15 @@ from the JavaScript runtime you already have.
 ::: code-group
 
 ```sh [npm]
-npm i mupdf4llm
+npm i @nalinor/mupdf4llm
 ```
 
 ```sh [bun]
-bun add mupdf4llm
+bun add @nalinor/mupdf4llm
 ```
 
 ```sh [pnpm]
-pnpm add mupdf4llm
+pnpm add @nalinor/mupdf4llm
 ```
 
 :::
@@ -56,7 +56,7 @@ pnpm add mupdf4llm
 ## 30-second tour
 
 ```ts
-import { toMarkdown } from "mupdf4llm";
+import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync } from "node:fs";
 
 const md = toMarkdown(readFileSync("paper.pdf"));
@@ -66,7 +66,7 @@ console.log(md);
 Need per-page chunks for RAG? Switch to `toMarkdownPages`:
 
 ```ts
-import { toMarkdownPages } from "mupdf4llm";
+import { toMarkdownPages } from "@nalinor/mupdf4llm";
 
 const chunks = toMarkdownPages(readFileSync("paper.pdf"), {
   extractWords: true,

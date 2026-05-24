@@ -9,7 +9,7 @@ font size, picks the most common size as the body limit, then assigns
 `#` … `######` to the larger sizes in descending order.
 
 ```ts
-import { toMarkdown, IdentifyHeaders } from "mupdf4llm";
+import { toMarkdown, IdentifyHeaders } from "@nalinor/mupdf4llm";
 
 const md = toMarkdown(buf); // implicit IdentifyHeaders
 ```
@@ -18,7 +18,7 @@ Tune it manually:
 
 ```ts
 import * as mupdf from "mupdf";
-import { toMarkdown, IdentifyHeaders } from "mupdf4llm";
+import { toMarkdown, IdentifyHeaders } from "@nalinor/mupdf4llm";
 
 const doc = mupdf.PDFDocument.openDocument(buf, "application/pdf");
 const hdr = new IdentifyHeaders(doc, {
@@ -39,7 +39,7 @@ don't reliably encode structure (e.g. reports with a flat type
 hierarchy but an authored outline).
 
 ```ts
-import { toMarkdown, TocHeaders } from "mupdf4llm";
+import { toMarkdown, TocHeaders } from "@nalinor/mupdf4llm";
 
 const md = toMarkdown(buf, { hdrInfo: new TocHeaders(doc) });
 ```

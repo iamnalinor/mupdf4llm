@@ -28,5 +28,5 @@ const {
 ```
 
 We deliberately don't pull `tesseract.js` in as a dependency — it's
-~10 MB of WASM and most users of `mupdf4llm` are processing PDFs with
+~10 MB of WASM and most users of `@nalinor/mupdf4llm` are processing PDFs with
 selectable text where OCR is unnecessary.

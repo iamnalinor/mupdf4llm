@@ -62,7 +62,7 @@ src/
     forms/
       formFields.ts         getKeyValues — port of utils.get_key_values
   llama/
-    pdfMarkdownReader.ts    LlamaIndex adapter (mupdf4llm/llama subpath)
+pdfMarkdownReader.ts    LlamaIndex adapter (@nalinor/mupdf4llm/llama subpath)
   ocr/
     README.md               why no OCR + tesseract.js recipe
 tests/

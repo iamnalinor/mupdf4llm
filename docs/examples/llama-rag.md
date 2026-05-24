@@ -1,14 +1,14 @@
 # LlamaIndex RAG
 
 End-to-end RAG using
-[`llamaindex`](https://ts.llamaindex.ai/) + `mupdf4llm/llama`.
+[`llamaindex`](https://ts.llamaindex.ai/) + `@nalinor/mupdf4llm/llama`.
 
 ```sh
-npm i mupdf4llm llamaindex @llamaindex/openai
+npm i @nalinor/mupdf4llm llamaindex @llamaindex/openai
 ```
 
 ```ts
-import { PDFMarkdownReader } from "mupdf4llm/llama";
+import { PDFMarkdownReader } from "@nalinor/mupdf4llm/llama";
 import { Settings, VectorStoreIndex } from "llamaindex";
 import { OpenAI, OpenAIEmbedding } from "@llamaindex/openai";
 

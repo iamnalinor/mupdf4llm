@@ -7,7 +7,7 @@ For RAG-style indexing where each page becomes its own chunk.
 Returns one `PageChunk` per page:
 
 ```ts
-import { toMarkdownPages } from "mupdf4llm";
+import { toMarkdownPages } from "@nalinor/mupdf4llm";
 
 const chunks = toMarkdownPages(buf);
 // chunks[i] = {
@@ -39,7 +39,7 @@ If you already have a `mupdf.Page`, use the lower-level helper:
 
 ```ts
 import * as mupdf from "mupdf";
-import { extractWords } from "mupdf4llm";
+import { extractWords } from "@nalinor/mupdf4llm";
 
 const page = doc.loadPage(0);
 const words = extractWords(page);

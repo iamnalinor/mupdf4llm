@@ -3,7 +3,7 @@
 ## Node 20+
 
 ```ts
-import { toMarkdown } from "mupdf4llm";
+import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const pdf = readFileSync("report.pdf");
@@ -14,7 +14,7 @@ writeFileSync("report.md", md);
 ## Bun
 
 ```ts
-import { toMarkdown } from "mupdf4llm";
+import { toMarkdown } from "@nalinor/mupdf4llm";
 
 const pdf = await Bun.file("report.pdf").bytes();
 await Bun.write("report.md", toMarkdown(pdf));
@@ -23,7 +23,7 @@ await Bun.write("report.md", toMarkdown(pdf));
 ## Browser
 
 ```ts
-import { toMarkdown } from "mupdf4llm";
+import { toMarkdown } from "@nalinor/mupdf4llm";
 
 const res = await fetch("/report.pdf");
 const buf = await res.arrayBuffer();

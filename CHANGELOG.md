@@ -58,7 +58,7 @@ backend on top of the official `mupdf` WASM package.
 
 ### Public API
 
-`mupdf4llm`:
+`@nalinor/mupdf4llm`:
 
 - `toMarkdown(buf, opts?): string` — convert a PDF buffer to a
   single Markdown string.
@@ -79,7 +79,7 @@ backend on top of the official `mupdf` WASM package.
 - `getPageRotation`, `setPageRotation`, `removeRotation` —
   `/Rotate` helpers.
 
-`mupdf4llm/llama` (subpath export, `llamaindex` is an optional peer
+`@nalinor/mupdf4llm/llama` (subpath export, `llamaindex` is an optional peer
 dep):
 
 - `PDFMarkdownReader` — LlamaIndex adapter. Returns one
@@ -172,7 +172,7 @@ src/
     layout/                     multiColumn, pageRotation
     images/                     imageExtract
     forms/                      formFields
-  llama/pdfMarkdownReader.ts    LlamaIndex adapter (mupdf4llm/llama subpath)
+  llama/pdfMarkdownReader.ts    LlamaIndex adapter (@nalinor/mupdf4llm/llama subpath)
   ocr/README.md                 why no OCR + tesseract.js recipe
 tests/
   parity.test.ts                synthetic PyMuPDF-generated fixtures, exact parity
@@ -184,7 +184,7 @@ docs/                           VitePress + TypeDoc documentation site
 
 ### Build & release
 
-- Dual ESM + CJS bundles for `mupdf4llm` and `mupdf4llm/llama`
+- Dual ESM + CJS bundles for `@nalinor/mupdf4llm` and `@nalinor/mupdf4llm/llama`
   via `bun build --target=node --external mupdf`.
 - `.d.ts` files emitted by `tsc -p tsconfig.build.json`.
 - `package.json` `exports` map covers both subpaths; `files`
