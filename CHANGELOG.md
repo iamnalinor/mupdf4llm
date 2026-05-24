@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `MarkdownOptions.elements` — an optional whitelist of markdown constructs
+  to emit (`"bold"`, `"italic"`, `"inlineCode"`, `"codeBlock"`, `"header"`,
+  `"bulletList"`, `"link"`, `"table"`, `"image"`, `"lineBreak"`). When
+  omitted, all constructs are emitted (unchanged behavior); when provided,
+  anything not listed falls back to plain text. Combines with the existing
+  toggles (`ignoreCode`, `hdrInfo: false`, `tableStrategy: null`,
+  `writeImages`/`embedImages`) — a construct is emitted only if both the
+  whitelist allows it and no legacy option disabled it. The
+  `MarkdownElement` union is exported from the package root.
+
 ### Fixed
 
 - Table cells whose text wraps across multiple visual lines no longer duplicate
