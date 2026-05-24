@@ -12,7 +12,16 @@ import { removeRotation } from "./layout/pageRotation";
 import { ProgressBar } from "./progress";
 import { renderPageImage, dedupeImages } from "./images/imageExtract";
 import { extractWords } from "./text/extractWords";
-import type { MarkdownOptions, PageContext, PageChunk, Span, LinkInfo, TableData } from "./types";
+import type {
+  MarkdownOptions,
+  MarkdownElement,
+  CellStyle,
+  PageContext,
+  PageChunk,
+  Span,
+  LinkInfo,
+  TableData,
+} from "./types";
 
 interface PageParams {
   page: mupdf.PDFPage;
@@ -78,6 +87,14 @@ function writeText(
     forceText: boolean;
     tables: boolean;
     images: boolean;
+    bold: boolean;
+    italic: boolean;
+    inlineCode: boolean;
+    codeBlock: boolean;
+    header: boolean;
+    bulletList: boolean;
+    link: boolean;
+    cellStyle: CellStyle;
   },
 ): string {
   let out = "";
@@ -115,7 +132,7 @@ function writeText(
         if (horizOverlap) tabCandidates.push(i);
       }
       for (const i of tabCandidates) {
-        out += "\n" + parms.tabs[i]!.to_markdown(false) + "\n";
+        out += "\n" + parms.tabs[i]!.to_markdown(false, opts.cellStyle) + "\n";
         parms.written_tables.add(i);
         prev_hdr_string = null;
       }
@@ -141,13 +158,13 @@ function writeText(
     const all_bold = spans.every((s) => s.flags & 16 || s.char_flags & 8);
     const all_mono = spans.every((s) => s.flags & 8);
 
-    const hdr_string = maxHeaderId(spans, getHeaderId, pageCtx);
+    const hdr_string = opts.header ? maxHeaderId(spans, getHeaderId, pageCtx) : "";
 
     if (hdr_string) {
       let text = text_full;
-      if (all_mono) text = "`" + text + "`";
-      if (all_italic) text = "_" + text + "_";
-      if (all_bold) text = "**" + text + "**";
+      if (all_mono && opts.inlineCode) text = "`" + text + "`";
+      if (all_italic && opts.italic) text = "_" + text + "_";
+      if (all_bold && opts.bold) text = "**" + text + "**";
       if (hdr_string !== prev_hdr_string) {
         out += hdr_string + text + "\n";
       } else {
@@ -159,7 +176,7 @@ function writeText(
     }
     prev_hdr_string = hdr_string;
 
-    if (all_mono && !opts.ignoreCode) {
+    if (all_mono && !opts.ignoreCode && opts.codeBlock) {
       if (!code) {
         out += "```\n";
         code = true;
@@ -203,27 +220,27 @@ function writeText(
       const italic = s.flags & 2;
       let prefix = "";
       let suffix = "";
-      if (mono) {
+      if (mono && opts.inlineCode) {
         prefix = "`" + prefix;
         suffix += "`";
       }
-      if (bold) {
+      if (bold && opts.bold) {
         prefix = "**" + prefix;
         suffix += "**";
       }
-      if (italic) {
+      if (italic && opts.italic) {
         prefix = "_" + prefix;
         suffix += "_";
       }
 
-      const ltext = resolveLinks(parms.links, s);
+      const ltext = opts.link ? resolveLinks(parms.links, s) : "";
       let text: string;
       if (ltext) {
         text = `${hdr_string}${prefix}${ltext}${suffix} `;
       } else {
         text = `${hdr_string}${prefix}${s.text.trim()}${suffix} `;
       }
-      if (startswithBullet(text)) {
+      if (opts.bulletList && startswithBullet(text)) {
         text = "- " + text.slice(1);
         text = text.replace(/  /g, " ");
         const dist = span0.bbox.x0 - clip.x0;
@@ -330,6 +347,15 @@ export function toMarkdown(
     fontsizeLimit,
     removeRotation: shouldRemoveRotation = true,
   } = opts;
+
+  const elementSet = opts.elements ? new Set(opts.elements) : null;
+  const isEl = (e: MarkdownElement) => elementSet === null || elementSet.has(e);
+  const cellStyle: CellStyle = {
+    bold: isEl("bold"),
+    italic: isEl("italic"),
+    inlineCode: isEl("inlineCode"),
+    lineBreak: isEl("lineBreak"),
+  };
 
   if (!writeImages && !embedImages && !forceText) {
     throw new Error("Images and text on images cannot both be suppressed.");
@@ -480,26 +506,38 @@ export function toMarkdown(
         parms.md_string += writeText(parms, tr, getHeaderId, pageCtx, {
           ignoreCode,
           forceText,
-          tables: true,
-          images: true,
+          tables: opts.tableStrategy !== null && isEl("table"),
+          images: isEl("image"),
+          bold: isEl("bold"),
+          italic: isEl("italic"),
+          inlineCode: isEl("inlineCode"),
+          codeBlock: isEl("codeBlock"),
+          header: isEl("header"),
+          bulletList: isEl("bulletList"),
+          link: isEl("link"),
+          cellStyle,
         });
       }
 
       parms.md_string = parms.md_string.replace(/ ,/g, ",").replace(/-\n/g, "");
 
       // emit any remaining tables (those not picked up above a text block)
-      for (const [i] of parms.tab_rects) {
-        if (parms.written_tables.has(i)) continue;
-        parms.md_string += parms.tabs[i]!.to_markdown(false) + "\n";
-        parms.written_tables.add(i);
+      if (isEl("table")) {
+        for (const [i] of parms.tab_rects) {
+          if (parms.written_tables.has(i)) continue;
+          parms.md_string += parms.tabs[i]!.to_markdown(false, cellStyle) + "\n";
+          parms.written_tables.add(i);
+        }
       }
 
       // Emit images after text + tables. `ref` is either a relative file path
       // (write_images) or a data: URL (embed_images). Alt text is empty to
       // match upstream's `GRAPHICS_TEXT = "\n![](%s)\n"`.
-      for (const p of pageImages) {
-        if (!p.ref) continue;
-        parms.md_string += `\n![](${p.ref})\n`;
+      if (isEl("image")) {
+        for (const p of pageImages) {
+          if (!p.ref) continue;
+          parms.md_string += `\n![](${p.ref})\n`;
+        }
       }
 
       while (parms.md_string.startsWith("\n")) parms.md_string = parms.md_string.slice(1);

@@ -1,5 +1,12 @@
 import { Rect, type BBox } from "../geometry";
-import type { Block, TableData, DrawingPath, Span } from "../types";
+import type { Block, TableData, DrawingPath, Span, CellStyle } from "../types";
+
+const DEFAULT_CELL_STYLE: CellStyle = {
+  bold: true,
+  italic: true,
+  inlineCode: true,
+  lineBreak: true,
+};
 import { areDisjoint } from "../utils";
 import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD } from "../constants";
 
@@ -182,14 +189,19 @@ function charsInCell(span: Span, cell: Rect): string {
 }
 
 /** Extract markdown-styled text from a rect. */
-function extractCellText(blocks: Block[], cell: Rect, markdown: boolean): string {
+function extractCellText(
+  blocks: Block[],
+  cell: Rect,
+  markdown: boolean,
+  style: CellStyle = DEFAULT_CELL_STYLE,
+): string {
   let text = "";
   for (const b of blocks) {
     if (b.type !== 0) continue;
     if (areDisjoint(b.bbox, cell)) continue;
     for (const line of b.lines) {
       if (areDisjoint(line.bbox, cell)) continue;
-      if (text) text += markdown ? "<br>" : "\n";
+      if (text) text += markdown && style.lineBreak ? "<br>" : "\n";
       for (const span of line.spans) {
         if (areDisjoint(span.bbox, cell)) continue;
         let st = charsInCell(span, cell);
@@ -202,15 +214,15 @@ function extractCellText(blocks: Block[], cell: Rect, markdown: boolean): string
         const { bold, italic, mono } = spanStyling([span]);
         let prefix = "",
           suffix = "";
-        if (bold) {
+        if (bold && style.bold) {
           prefix = "**" + prefix;
           suffix = "**" + suffix;
         }
-        if (italic) {
+        if (italic && style.italic) {
           prefix = "_" + prefix;
           suffix = "_" + suffix;
         }
-        if (mono) {
+        if (mono && style.inlineCode) {
           prefix = "`" + prefix;
           suffix = "`" + suffix;
         }
@@ -264,7 +276,7 @@ class Table implements TableData {
     };
   }
 
-  to_markdown(_clean = true): string {
+  to_markdown(_clean = true, style: CellStyle = DEFAULT_CELL_STYLE): string {
     const grid: string[][] = [];
     for (let r = 0; r < this.row_count; r++) {
       const row: string[] = [];
@@ -275,8 +287,9 @@ class Table implements TableData {
       const markdown = r !== 0;
       for (let c = 0; c < this.col_count; c++) {
         const cell = this.cells[r]![c];
-        const txt = cell ? extractCellText(this.blocks, Rect.from(cell), markdown) : "";
-        row.push(markdown ? txt : txt.replace(/\n/g, "<br>"));
+        const txt = cell ? extractCellText(this.blocks, Rect.from(cell), markdown, style) : "";
+        const headerTxt = style.lineBreak ? txt.replace(/\n/g, "<br>") : txt.replace(/\n/g, " ");
+        row.push(markdown ? txt : headerTxt);
       }
       grid.push(row);
     }
