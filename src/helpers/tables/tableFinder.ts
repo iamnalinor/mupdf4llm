@@ -1,5 +1,11 @@
 import { Rect, type BBox } from "../geometry";
 import type { Block, TableData, DrawingPath, Span, CellStyle } from "../types";
+import { areDisjoint } from "../utils";
+import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD } from "../constants";
+
+export type TableStrategy = "lines_strict" | "lines" | "text" | "explicit";
+
+const TOL = 3; // snapping tolerance for line coordinates
 
 const DEFAULT_CELL_STYLE: CellStyle = {
   bold: true,
@@ -7,12 +13,6 @@ const DEFAULT_CELL_STYLE: CellStyle = {
   inlineCode: true,
   lineBreak: true,
 };
-import { areDisjoint } from "../utils";
-import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD } from "../constants";
-
-export type TableStrategy = "lines_strict" | "lines" | "text" | "explicit";
-
-const TOL = 3; // snapping tolerance for line coordinates
 
 function uniqueSorted(vals: number[]): number[] {
   const sorted = vals.slice().sort((a, b) => a - b);

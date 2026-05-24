@@ -17,7 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   toggles (`ignoreCode`, `hdrInfo: false`, `tableStrategy: null`,
   `writeImages`/`embedImages`) — a construct is emitted only if both the
   whitelist allows it and no legacy option disabled it. The
-  `MarkdownElement` union is exported from the package root.
+  `MarkdownElement` union is exported from the package root. When `"table"`
+  is not whitelisted, table detection is skipped entirely so the cell text
+  flows back into the normal paragraph stream instead of being dropped.
 
 ### Fixed
 
