@@ -36,9 +36,16 @@ const PACKAGE = "ppu-paddle-ocr";
  * `onnxruntime-node`. Models are downloaded and cached on first use.
  *
  * Create one engine and pass it as `ocr` to reuse the loaded models across
- * documents; call `dispose()` when done.
+ * documents; release them with `dispose()`, or let `await using` do it:
+ *
+ * ```ts
+ * await using ocr = await createRapidOcr();
+ * for (const buf of pdfs) await toMarkdown(buf, { tableStrategy: "pixels", ocr });
+ * ```
  */
-export async function createRapidOcr(opts: RapidOcrOptions = {}): Promise<OcrEngine> {
+export async function createRapidOcr(
+  opts: RapidOcrOptions = {},
+): Promise<OcrEngine & AsyncDisposable> {
   let lib: any;
   try {
     lib = await import(PACKAGE);
@@ -58,7 +65,7 @@ export async function createRapidOcr(opts: RapidOcrOptions = {}): Promise<OcrEng
   } catch (e) {
     throw new OcrSetupError(`Failed to load the OCR models: ${String(e)}`, { cause: e });
   }
-  return {
+  return disposable({
     async recognize(image) {
       // The detector misses lone narrow glyphs ("1", "|") in a small crop;
       // on an empty result, retry at double size.
@@ -76,7 +83,24 @@ export async function createRapidOcr(opts: RapidOcrOptions = {}): Promise<OcrEng
     async dispose() {
       await service.destroy();
     },
-  };
+  });
+}
+
+/**
+ * Add `Symbol.asyncDispose` to an engine, so that
+ * `await using ocr = await createRapidOcr()` releases the models when the
+ * block ends. Needs a runtime that defines the symbol (Node ≥ 20.4, Bun).
+ */
+export function disposable<E extends OcrEngine>(engine: E): E & AsyncDisposable {
+  const key = (Symbol as { asyncDispose?: symbol }).asyncDispose;
+  if (key) {
+    Object.defineProperty(engine, key, {
+      value: async () => {
+        await engine.dispose?.();
+      },
+    });
+  }
+  return engine as E & AsyncDisposable;
 }
 
 /**

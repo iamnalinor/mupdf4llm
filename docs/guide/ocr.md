@@ -111,13 +111,15 @@ documents, with `createRapidOcr`:
 ```ts
 import { toMarkdown, createRapidOcr } from "@nalinor/mupdf4llm";
 
-const ocr = await createRapidOcr({ model: "v5-latin-mobile" });
-try {
+{
+  // The models are released when the block ends.
+  await using ocr = await createRapidOcr({ model: "v5-latin-mobile" });
   for (const buf of pdfs) await toMarkdown(buf, { tableStrategy: "pixels", ocr });
-} finally {
-  await ocr.dispose?.();
 }
 ```
+
+`await using` needs Node ≥ 20.4 or Bun (and TypeScript ≥ 5.2). Without
+it, call `await ocr.dispose()` in a `finally` block.
 
 `model` takes any `ppu-paddle-ocr` preset name (`"v5-en-mobile"`,
 `"v5-eslav-mobile"`, `"v6-small"`, …) or explicit

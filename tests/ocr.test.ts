@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 import * as mupdf from "mupdf";
 import { toMarkdown, toMarkdownPages, createRapidOcr, OcrSetupError, Rect } from "../src/index";
 import type { OcrEngine, OcrImage } from "../src/index";
-import { PageRaster } from "../src/helpers/ocr/engine";
+import { PageRaster, grayImage } from "../src/helpers/ocr/engine";
+import { disposable } from "../src/helpers/ocr/rapidOcr";
 import { looksBroken } from "../src/helpers/ocr/cellText";
 import { detectRulings, rowBreaks } from "../src/helpers/tables/pixelGrid";
 import { degrade, type Degradation } from "./helpers/degrade";
@@ -27,6 +28,19 @@ const rows = (md: string) =>
     .split("\n")
     .filter((l) => l.startsWith("|") && !l.startsWith("|---"))
     .map((l) => l.slice(1, -1).split("|"));
+
+test("await using disposes an engine from createRapidOcr at the end of the block", async () => {
+  let disposed = 0;
+  {
+    await using ocr = disposable({
+      recognize: async (_img: OcrImage) => "x",
+      dispose: async () => void disposed++,
+    });
+    expect(await ocr.recognize(grayImage(new Uint8Array(1).fill(255), 1, 1))).toBe("x");
+    expect(disposed).toBe(0);
+  }
+  expect(disposed).toBe(1);
+});
 
 describe("rowBreaks", () => {
   const line = (top: number, cols: number, run: number) => ({
@@ -453,66 +467,63 @@ describe("pixels strategy on real scans", () => {
 testOcr(
   "RapidOCR reads the real scans",
   async () => {
-    const ocr = await createRapidOcr();
-    try {
-      const us = rows(
-        await toMarkdown(fixture("scan-us-census-1900.pdf"), { tableStrategy: "pixels", ocr }),
-      );
-      expect(us).toContainEqual([
-        expect.stringMatching(/New York.*1900/),
-        "23.7",
-        "25.3",
-        "20.4",
-        "27.2",
-        "29.5",
-        "22.3",
-        "20.3",
-        "21.0",
-        "18.6",
-      ]);
-      expect(us).toContainEqual([
-        expect.stringMatching(/^1890/),
-        "24.0",
-        "28.8",
-        "16.2",
-        "26.3",
-        "32.1",
-        "17.2",
-        "21.7",
-        "25.6",
-        "15.2",
-      ]);
-      expect(us).toContainEqual([
-        expect.stringMatching(/Russia and Poland/),
-        "9.8",
-        "9.8",
-        "9.6",
-        "9.4",
-        "11.1",
-        "10.8",
-      ]);
-      const ru = rows(
-        await toMarkdown(fixture("scan-ru-census-1918.pdf"), { tableStrategy: "pixels", ocr }),
-      );
-      expect(ru).toContainEqual([
-        "24",
-        expect.stringMatching(/Транспорт/),
-        "23951",
-        "5293,10",
-        "479",
-        "112,6",
-      ]);
-      expect(ru).toContainEqual([
-        "",
-        expect.stringMatching(/Итого/),
-        "1252468",
-        "1882966,64",
-        "185",
-        "233,2",
-      ]);
-    } finally {
-      await ocr.dispose?.();
-    }
+    // Released at the end of the test through Symbol.asyncDispose.
+    await using ocr = await createRapidOcr();
+    const us = rows(
+      await toMarkdown(fixture("scan-us-census-1900.pdf"), { tableStrategy: "pixels", ocr }),
+    );
+    expect(us).toContainEqual([
+      expect.stringMatching(/New York.*1900/),
+      "23.7",
+      "25.3",
+      "20.4",
+      "27.2",
+      "29.5",
+      "22.3",
+      "20.3",
+      "21.0",
+      "18.6",
+    ]);
+    expect(us).toContainEqual([
+      expect.stringMatching(/^1890/),
+      "24.0",
+      "28.8",
+      "16.2",
+      "26.3",
+      "32.1",
+      "17.2",
+      "21.7",
+      "25.6",
+      "15.2",
+    ]);
+    expect(us).toContainEqual([
+      expect.stringMatching(/Russia and Poland/),
+      "9.8",
+      "9.8",
+      "9.6",
+      "9.4",
+      "11.1",
+      "10.8",
+    ]);
+    const ru = rows(
+      await toMarkdown(fixture("scan-ru-census-1918.pdf"), { tableStrategy: "pixels", ocr }),
+    );
+    expect(ru).toContainEqual([
+      "24",
+      expect.stringMatching(/Транспорт/),
+      "23951",
+      "5293,10",
+      "479",
+      "112,6",
+    ]);
+    expect(ru).toContainEqual([
+      "",
+      expect.stringMatching(/Итого/),
+      "1252468",
+      "1882966,64",
+      "185",
+      "233,2",
+    ]);
   },
   300_000,
 );

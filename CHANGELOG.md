@@ -42,7 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (PP-OCRv5 `cyrillic` model, Cyrillic and Latin, via the optional peer
   dependencies `ppu-paddle-ocr` + `onnxruntime-node`), loaded only when a
   cell needs OCR. A multi-line cell is recognised line by line when the
-  whole-cell result misses lines; leader dots are removed. `createRapidOcr({ model })` creates a reusable engine;
+  whole-cell result misses lines; leader dots are removed. `createRapidOcr({ model })` creates a reusable engine
+  (disposable with `await using`);
   a missing package or model rejects with `OcrSetupError` (exported),
   which custom engines throw for fatal setup problems too.
   OCR runs per table cell, not per page.
