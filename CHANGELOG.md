@@ -15,9 +15,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   span per cell counted as a row. Rows assembled from separate lines need
   three columns and three rows, and columns of running text are rejected.
 - `text` table strategy: right-aligned and centred cells no longer split
-  their column. A column start is ignored when the first row or two rows
-  have a word across it; a single wide row (a totals line) does not remove
-  a column.
+  their column. A column start is ignored when the first row, two rows, or
+  a wider value of the same column has a word across it; a single wide row
+  starting in another column (a totals line) does not remove a column.
 - `text` table strategy: a header above the table body whose labels wrap
   over several lines becomes the header row and defines the column
   boundaries. A label taller than the first row that it touches stays in
