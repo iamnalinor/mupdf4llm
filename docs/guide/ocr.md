@@ -80,8 +80,9 @@ await toMarkdown(buf, { textSource: "ocr" }); // grid from lines_strict, text fr
   `"pixels"`.
 - `"auto"` — the text layer, and OCR only for cells whose text is empty
   or looks broken: replacement (`U+FFFD`), private-use or control
-  characters, or text of 4+ characters that is mostly neither letters
-  nor digits. A wrong encoding that still produces letters (Latin
+  characters, a word mixing Cyrillic and Latin letters (a Latin "c" in
+  "Иcтория" reads right but breaks search), or text of 4+ characters that
+  is mostly neither letters nor digits. A wrong encoding that still produces letters (Latin
   gibberish instead of Cyrillic) is **not** detected — use `"ocr"` for
   such documents.
 

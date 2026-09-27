@@ -126,6 +126,18 @@ test("PageRaster.crop drops empty cells and trims ruling lines", () => {
   expect(Array.from(img.png().slice(1, 4))).toEqual([0x50, 0x4e, 0x47]); // "PNG"
 });
 
+test("looksBroken: Cyrillic and Latin letters mixed inside one word", () => {
+  // A Latin "c" in a Cyrillic word: looks right, breaks search.
+  expect(looksBroken("И" + "c" + "тория искусств")).toBe(true);
+  expect(looksBroken("язы" + "k")).toBe(true);
+  // Separate words in different scripts are normal.
+  expect(looksBroken("История искусств")).toBe(false);
+  expect(looksBroken("IT-отдел")).toBe(false);
+  expect(looksBroken("Wi-Fi, 5 ГГц")).toBe(false);
+  expect(looksBroken("XIV гр. Обработка")).toBe(false);
+  expect(looksBroken("COVID-19")).toBe(false);
+});
+
 test("looksBroken", () => {
   const pua = String.fromCharCode(0xe021, 0xe04e, 0xe06f);
   expect(looksBroken("")).toBe(true);
