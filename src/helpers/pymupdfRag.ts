@@ -404,7 +404,7 @@ export function toMarkdown(
     let page = doc.loadPage(pno) as mupdf.PDFPage;
     const prevRotation = shouldRemoveRotation ? removeRotation(doc, page) : 0;
     // remove_rotation bakes a derotation matrix into the content stream and
-    // swaps the MediaBox; reload so getBounds() reflects the new page box.
+    // remaps the page boxes; reload so getBounds() reflects the new page box.
     if (prevRotation !== 0) page = doc.loadPage(pno) as mupdf.PDFPage;
     {
       const rectBounds = page.getBounds();
@@ -427,10 +427,11 @@ export function toMarkdown(
       const pageImages: { bbox: Rect; ref: string; width: number; height: number }[] = [];
       if (detectTables || opts.writeImages || opts.embedImages) {
         try {
-          const { paths, images } = extractDrawings(page);
+          const { paths, edges, images } = extractDrawings(page, { vectors: detectTables });
           if (detectTables) {
             tabs = findTables(td.blocks, paths, clip, {
               strategy: opts.tableStrategy ?? "lines_strict",
+              edges,
               explicitGrid: opts.explicitTableGrids,
             });
             tabs.forEach((t, i) => {

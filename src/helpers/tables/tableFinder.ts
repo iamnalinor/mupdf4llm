@@ -1,5 +1,5 @@
 import { Rect, type BBox } from "../geometry";
-import type { Block, TableData, DrawingPath, Span, CellStyle } from "../types";
+import type { Block, TableData, DrawingEdge, DrawingPath, Span, CellStyle } from "../types";
 import { areDisjoint } from "../utils";
 import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD } from "../constants";
 
@@ -37,11 +37,6 @@ function pathToEdges(
     const x = (r.x0 + r.x1) / 2;
     edges.push({ kind: "v", x0: x, x1: x, y0: r.y0, y1: r.y1 });
   } else if (p.type === "f" && r.width >= edgeMin && r.height >= edgeMin) {
-    edges.push({ kind: "h", x0: r.x0, x1: r.x1, y0: r.y0, y1: r.y0 });
-    edges.push({ kind: "h", x0: r.x0, x1: r.x1, y0: r.y1, y1: r.y1 });
-    edges.push({ kind: "v", x0: r.x0, x1: r.x0, y0: r.y0, y1: r.y1 });
-    edges.push({ kind: "v", x0: r.x1, x1: r.x1, y0: r.y0, y1: r.y1 });
-  } else if (p.type === "s" && (r.width >= edgeMin || r.height >= edgeMin)) {
     edges.push({ kind: "h", x0: r.x0, x1: r.x1, y0: r.y0, y1: r.y0 });
     edges.push({ kind: "h", x0: r.x0, x1: r.x1, y0: r.y1, y1: r.y1 });
     edges.push({ kind: "v", x0: r.x0, x1: r.x0, y0: r.y0, y1: r.y1 });
@@ -163,23 +158,21 @@ function spanStyling(spans: Span[]): {
 const WHITESPACE_RE = /\s/;
 
 /**
- * Per-character cell membership: a char belongs to the cell when its bbox area
- * overlaps the cell by >50% of the char's own area. Whitespace chars whose bbox
- * is mostly outside degrade to a single space. Mirrors upstream
- * pymupdf/table.py:extract_cells (1.27.2.3) — without this gate, wrapped text
- * whose span bbox grazes a row boundary gets pulled into both adjacent cells.
+ * Per-character cell membership: a char belongs to the cell that contains the
+ * center of its bbox (half-open on the right/bottom edge, so a char is never
+ * claimed by two neighbouring cells). For boxes this includes every char with
+ * >50% of its area inside the cell — the upstream pymupdf/table.py rule — and
+ * additionally keeps glyphs whose line box is taller than the row, which the
+ * area rule dropped from every cell. Whitespace chars outside the cell degrade
+ * to a single space.
  */
 function charsInCell(span: Span, cell: Rect): string {
   let out = "";
   for (const ch of span.chars) {
     const cb = ch.bbox;
-    const ix0 = Math.max(cb[0], cell.x0);
-    const iy0 = Math.max(cb[1], cell.y0);
-    const ix1 = Math.min(cb[2], cell.x1);
-    const iy1 = Math.min(cb[3], cell.y1);
-    const interArea = Math.max(0, ix1 - ix0) * Math.max(0, iy1 - iy0);
-    const charArea = Math.max(0, cb[2] - cb[0]) * Math.max(0, cb[3] - cb[1]);
-    if (interArea > 0.5 * charArea) {
+    const cx = (cb[0] + cb[2]) / 2;
+    const cy = (cb[1] + cb[3]) / 2;
+    if (cx >= cell.x0 && cx < cell.x1 && cy >= cell.y0 && cy < cell.y1) {
       out += ch.c;
     } else if (WHITESPACE_RE.test(ch.c)) {
       out += " ";
@@ -239,6 +232,180 @@ function extractCellText(
   return text.trim();
 }
 
+/** Does some line in `lines` at `pos` cover the whole span [a, b]? */
+function covered(
+  lines: { pos: number; lo: number; hi: number }[],
+  pos: number,
+  a: number,
+  b: number,
+) {
+  return lines.some((l) => Math.abs(l.pos - pos) <= TOL && l.lo <= a + TOL && l.hi >= b - TOL);
+}
+
+/**
+ * Bounding boxes of the words inside `area`. Words break at whitespace and at
+ * horizontal gaps wider than a third of the font size, so text from two
+ * neighbouring cells never forms one word even without a space between them.
+ */
+function wordBoxes(blocks: Block[], area: Rect): BBox[] {
+  const out: BBox[] = [];
+  for (const b of blocks) {
+    if (b.type !== 0 || areDisjoint(b.bbox, area)) continue;
+    for (const line of b.lines) {
+      if (areDisjoint(line.bbox, area)) continue;
+      for (const span of line.spans) {
+        let cur: BBox | null = null;
+        for (const ch of span.chars) {
+          const cb = ch.bbox;
+          const gap = cur ? cb[0] - cur[2] : 0;
+          if (WHITESPACE_RE.test(ch.c) || (cur && gap > span.size / 3)) {
+            if (cur) out.push(cur);
+            cur = null;
+            if (WHITESPACE_RE.test(ch.c)) continue;
+          }
+          cur = cur
+            ? [
+                Math.min(cur[0], cb[0]),
+                Math.min(cur[1], cb[1]),
+                Math.max(cur[2], cb[2]),
+                Math.max(cur[3], cb[3]),
+              ]
+            : [cb[0], cb[1], cb[2], cb[3]];
+        }
+        if (cur) out.push(cur);
+      }
+    }
+  }
+  return out;
+}
+
+/** Minimal overhang (pt) on both sides for a word to count as crossing a boundary. */
+const CROSS_MIN = 1;
+
+/**
+ * Cell grid for a table. Two neighbouring grid cells form one merged cell when
+ * no ruling line separates them *and* some word crosses their common border —
+ * i.e. the grid coordinate would cut through text (a header centred over
+ * several columns, a label spanning two header rows). Borders without a line
+ * but without crossing text (tables with column rules only in the header)
+ * stay separate. A merged cell's bbox is stored at the group's top-left
+ * position and the other positions are `null` (as in PyMuPDF). Groups that
+ * are not rectangular fall back to plain cells.
+ */
+function buildCells(
+  cols: number[],
+  rows: number[],
+  hLines: { y: number; x0: number; x1: number }[],
+  vLines: { x: number; y0: number; y1: number }[],
+  blocks: Block[],
+): (BBox | null)[][] {
+  const nr = rows.length - 1;
+  const nc = cols.length - 1;
+  if (nr <= 0 || nc <= 0) return [];
+  const hs = hLines.map((h) => ({ pos: h.y, lo: h.x0, hi: h.x1 }));
+  const vs = vLines.map((v) => ({ pos: v.x, lo: v.y0, hi: v.y1 }));
+  const words = wordBoxes(blocks, new Rect(cols[0]!, rows[0]!, cols[nc]!, rows[nr]!));
+  // Does a word cross the vertical border x within the band [y0, y1)?
+  const crossesV = (x: number, y0: number, y1: number) =>
+    words.some((w) => {
+      const cy = (w[1] + w[3]) / 2;
+      return cy >= y0 && cy < y1 && w[0] < x - CROSS_MIN && w[2] > x + CROSS_MIN;
+    });
+  // Does a word cross the horizontal border y within the band [x0, x1)?
+  const crossesH = (y: number, x0: number, x1: number) =>
+    words.some((w) => {
+      const cx = (w[0] + w[2]) / 2;
+      return cx >= x0 && cx < x1 && w[1] < y - CROSS_MIN && w[3] > y + CROSS_MIN;
+    });
+
+  const parent = Array.from({ length: nr * nc }, (_, i) => i);
+  const find = (x: number): number => (parent[x] === x ? x : (parent[x] = find(parent[x]!)));
+  const union = (a: number, b: number) => {
+    const ra = find(a),
+      rb = find(b);
+    if (ra !== rb) parent[Math.max(ra, rb)] = Math.min(ra, rb);
+  };
+  // Walk each row (column) as runs of consecutive borders without a ruling
+  // line. Such a run is one visual cell; it is merged when text crosses any
+  // of its borders.
+  const mergeRuns = (
+    n: number,
+    open: (i: number) => boolean,
+    crossed: (i: number) => boolean,
+    join: (i: number) => void,
+  ) => {
+    for (let i = 0; i < n; ) {
+      if (!open(i)) {
+        i++;
+        continue;
+      }
+      let j = i;
+      while (j < n && open(j)) j++;
+      let hit = false;
+      for (let k = i; k < j && !hit; k++) hit = crossed(k);
+      if (hit) for (let k = i; k < j; k++) join(k);
+      i = j;
+    }
+  };
+  for (let r = 0; r < nr; r++) {
+    // border k lies between columns k and k+1
+    mergeRuns(
+      nc - 1,
+      (k) => !covered(vs, cols[k + 1]!, rows[r]!, rows[r + 1]!),
+      (k) => crossesV(cols[k + 1]!, rows[r]!, rows[r + 1]!),
+      (k) => union(r * nc + k, r * nc + k + 1),
+    );
+  }
+  for (let c = 0; c < nc; c++) {
+    // border k lies between rows k and k+1
+    mergeRuns(
+      nr - 1,
+      (k) => !covered(hs, rows[k + 1]!, cols[c]!, cols[c + 1]!),
+      (k) => crossesH(rows[k + 1]!, cols[c]!, cols[c + 1]!),
+      (k) => union(k * nc + c, (k + 1) * nc + c),
+    );
+  }
+
+  const groups = new Map<number, { r0: number; c0: number; r1: number; c1: number; n: number }>();
+  for (let r = 0; r < nr; r++) {
+    for (let c = 0; c < nc; c++) {
+      const g = find(r * nc + c);
+      const e = groups.get(g);
+      if (!e) groups.set(g, { r0: r, c0: c, r1: r, c1: c, n: 1 });
+      else {
+        e.r0 = Math.min(e.r0, r);
+        e.c0 = Math.min(e.c0, c);
+        e.r1 = Math.max(e.r1, r);
+        e.c1 = Math.max(e.c1, c);
+        e.n++;
+      }
+    }
+  }
+
+  const cells: (BBox | null)[][] = [];
+  for (let r = 0; r < nr; r++) {
+    const row: (BBox | null)[] = [];
+    for (let c = 0; c < nc; c++) {
+      const g = groups.get(find(r * nc + c))!;
+      const rectangular = g.n === (g.r1 - g.r0 + 1) * (g.c1 - g.c0 + 1);
+      if (!rectangular) row.push([cols[c]!, rows[r]!, cols[c + 1]!, rows[r + 1]!]);
+      else if (r === g.r0 && c === g.c0)
+        row.push([cols[g.c0]!, rows[g.r0]!, cols[g.c1 + 1]!, rows[g.r1 + 1]!]);
+      else row.push(null);
+    }
+    cells.push(row);
+  }
+  return cells;
+}
+
+/**
+ * Join the lines of a cell into one line. A word wrapped after a hyphen
+ * ("Saint-" / "Petersburg") is rejoined without the extra space.
+ */
+function joinCellLines(txt: string): string {
+  return txt.replace(/(\p{L})-\n(?=\p{L})/gu, "$1-").replace(/\n/g, " ");
+}
+
 class Table implements TableData {
   bbox: BBox;
   header: { bbox: BBox; cells: (BBox | null)[]; external: boolean };
@@ -255,22 +422,14 @@ class Table implements TableData {
     this.blocks = blocks;
     this.bbox = [cluster.bbox.x0, cluster.bbox.y0, cluster.bbox.x1, cluster.bbox.y1];
 
-    const cells: (BBox | null)[][] = [];
-    for (let r = 0; r < this.row_count; r++) {
-      const row: (BBox | null)[] = [];
-      for (let c = 0; c < this.col_count; c++) {
-        row.push([cols[c]!, rows[r]!, cols[c + 1]!, rows[r + 1]!]);
-      }
-      cells.push(row);
-    }
-    this.cells = cells;
-    const headerRow = cells[0] ?? [];
-    const headerX0 = headerRow.length ? headerRow[0]![0] : this.bbox[0];
-    const headerX1 = headerRow.length ? headerRow[headerRow.length - 1]![2] : this.bbox[2];
-    const headerY0 = headerRow.length ? headerRow[0]![1] : this.bbox[1];
-    const headerY1 = headerRow.length ? headerRow[0]![3] : this.bbox[1];
+    this.cells = buildCells(cols, rows, cluster.hLines, cluster.vLines, blocks);
+    const headerRow = this.cells[0] ?? [];
+    // First grid row; with merged cells its first/last entries may be null.
+    const hasGrid = this.row_count > 0 && this.col_count > 0;
     this.header = {
-      bbox: [headerX0, headerY0, headerX1, headerY1],
+      bbox: hasGrid
+        ? [cols[0]!, rows[0]!, cols[cols.length - 1]!, rows[1]!]
+        : [this.bbox[0], this.bbox[1], this.bbox[2], this.bbox[1]],
       cells: headerRow,
       external: false,
     };
@@ -288,8 +447,10 @@ class Table implements TableData {
       for (let c = 0; c < this.col_count; c++) {
         const cell = this.cells[r]![c];
         const txt = cell ? extractCellText(this.blocks, Rect.from(cell), markdown, style) : "";
-        const headerTxt = style.lineBreak ? txt.replace(/\n/g, "<br>") : txt.replace(/\n/g, " ");
-        row.push(markdown ? txt : headerTxt);
+        // A raw newline would terminate the markdown table row, so body cells
+        // get the same treatment as the header when `<br>` is disabled.
+        const headerTxt = style.lineBreak ? txt.replace(/\n/g, "<br>") : joinCellLines(txt);
+        row.push(markdown && style.lineBreak ? txt : headerTxt);
       }
       grid.push(row);
     }
@@ -305,6 +466,8 @@ class Table implements TableData {
 
 interface FindTablesOpts {
   strategy?: TableStrategy;
+  /** Ruling lines recovered by `extractDrawings`, used alongside `paths`. */
+  edges?: DrawingEdge[];
   explicitGrid?: { hLines: number[]; vLines: number[] }[];
 }
 
@@ -325,12 +488,24 @@ export function findTables(
 
   // "lines" / "lines_strict" — same algorithm, "lines" is more tolerant of
   // partial/short edges.
-  if (!paths.length) return [];
+  const drawnEdges = opts.edges ?? [];
+  if (!paths.length && !drawnEdges.length) return [];
   const allEdges: { kind: "h" | "v"; x0: number; y0: number; x1: number; y1: number }[] = [];
   const edgeMin = strategy === "lines" ? 2 : 3;
   for (const p of paths) {
     if (!clip.contains(p.rect) && !p.rect.intersects(clip)) continue;
     allEdges.push(...pathToEdges(p, edgeMin));
+  }
+  for (const e of drawnEdges) {
+    if (e.kind === "h") {
+      if (e.x1 - e.x0 < edgeMin || e.y < clip.y0 || e.y > clip.y1) continue;
+      if (e.x1 < clip.x0 || e.x0 > clip.x1) continue;
+      allEdges.push({ kind: "h", x0: e.x0, x1: e.x1, y0: e.y, y1: e.y });
+    } else {
+      if (e.y1 - e.y0 < edgeMin || e.x < clip.x0 || e.x > clip.x1) continue;
+      if (e.y1 < clip.y0 || e.y0 > clip.y1) continue;
+      allEdges.push({ kind: "v", x0: e.x, x1: e.x, y0: e.y0, y1: e.y1 });
+    }
   }
   const hLines = mergeH(allEdges);
   const vLines = mergeV(allEdges);
@@ -342,6 +517,16 @@ export function findTables(
     if (t.row_count >= minRows && t.col_count >= 2) out.push(t);
   }
   out.sort((a, b) => a.bbox[0] - b.bbox[0] || a.bbox[1] - b.bbox[1]);
+  if (typeof process !== "undefined" && process.env?.DEBUG_MUPDF4LLM) {
+    const tabs = out.map(
+      (t) => `${t.row_count}x${t.col_count}@[${t.bbox.map((v) => v.toFixed(0))}]`,
+    );
+    console.error(
+      `[mupdf4llm] tables: paths=${paths.length} edges=${drawnEdges.length} ` +
+        `hLines=${hLines.length} vLines=${vLines.length} clusters=${clusters.length} ` +
+        `tables=${out.length} ${tabs.join(" ")}`,
+    );
+  }
   return out;
 }
 

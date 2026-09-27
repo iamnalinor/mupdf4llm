@@ -50,13 +50,13 @@ export function setPageRotation(
  * Faithful port of PyMuPDF's `page.remove_rotation()`: clearing the `/Rotate`
  * entry alone leaves text and vector content in the page's raw (authoring)
  * orientation, which transposes rows/columns of any table on a 90°/270° page.
- * Instead we prepend a derotation matrix to the content stream and swap the
- * MediaBox for 90°/270°, so downstream extraction sees coordinates in the
- * visually-correct (display) frame — matching upstream pymupdf4llm, which
- * calls `remove_rotation()` on every page.
+ * Instead we prepend a derotation matrix to the content stream and map the
+ * page boxes (MediaBox, CropBox, ...) through it, so downstream extraction
+ * sees coordinates in the visually-correct (display) frame — matching
+ * upstream pymupdf4llm, which calls `remove_rotation()` on every page.
  *
  * The caller must reload the page afterwards (`doc.loadPage`) for the new
- * MediaBox bounds to take effect.
+ * page bounds to take effect.
  */
 export function removeRotation(doc: mupdf.PDFDocument, page: mupdf.PDFPage): number {
   const rot = getPageRotation(page);
@@ -73,6 +73,22 @@ export function removeRotation(doc: mupdf.PDFDocument, page: mupdf.PDFPage): num
     else if (rot === 270) cm = [0, 1, -1, 0, y0 + y1, 0];
     else cm = [-1, 0, 0, -1, x0 + x1, y0 + y1]; // 180
 
+    // Map every page box through the derotation so they stay consistent with
+    // the content. Swapping only the MediaBox would leave e.g. a CropBox in the
+    // old orientation, and the page bounds (their intersection) would cut off
+    // part of a rotated page. Computed before touching the page so a failure
+    // cannot leave the content and the boxes out of step.
+    const boxes: [string, number[]][] = [];
+    for (const key of ["MediaBox", "CropBox", "TrimBox", "BleedBox", "ArtBox"]) {
+      // MediaBox and CropBox are inheritable, the others are not.
+      const box = key === "MediaBox" || key === "CropBox" ? obj.getInheritable(key) : obj.get(key);
+      if (!box || box.isNull() || !box.isArray()) continue;
+      const [bx0, by0, bx1, by1] = box.asJS() as [number, number, number, number];
+      const xs = [cm[0] * bx0 + cm[2] * by0 + cm[4], cm[0] * bx1 + cm[2] * by1 + cm[4]];
+      const ys = [cm[1] * bx0 + cm[3] * by0 + cm[5], cm[1] * bx1 + cm[3] * by1 + cm[5]];
+      boxes.push([key, [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]]);
+    }
+
     const cmStream = doc.addStream(cm.map(fmtNum).join(" ") + " cm\n", null);
     const contents = obj.get("Contents");
     const arr = doc.newArray();
@@ -81,11 +97,10 @@ export function removeRotation(doc: mupdf.PDFDocument, page: mupdf.PDFPage): num
     else arr.push(contents);
     obj.put("Contents", arr);
 
-    // Swap MediaBox x/y for quarter turns.
-    if (rot === 90 || rot === 270) {
-      const swapped = doc.newArray();
-      for (const v of [y0, x0, y1, x1]) swapped.push(doc.newReal(v));
-      obj.put("MediaBox", swapped);
+    for (const [key, box] of boxes) {
+      const mapped = doc.newArray();
+      for (const v of box) mapped.push(doc.newReal(v));
+      obj.put(key, mapped);
     }
 
     obj.delete("Rotate");
