@@ -832,13 +832,27 @@ function findTablesByText(blocks: Block[], clip: Rect): TableData[] {
       words.filter((w) => r.rect.contains([(w[0] + w[2]) / 2, (w[1] + w[3]) / 2])),
     );
     // A start inside a word of another row comes from a right-aligned or
-    // centred cell. Drop it when the first row (usually the labels) or two
-    // rows cross it; a single wide row (a totals line) crossing a real
-    // column start keeps the column.
+    // centred cell. Drop it when the first row (usually the labels) crosses
+    // it, when two rows do, or when a word crosses it that does not itself
+    // begin at a column start shared by several rows (a wider number of the
+    // same column). A single wide row beginning in another column (a totals
+    // line) does not remove a column.
+    const startCount = (x: number) =>
+      group.filter((r) => r.xs.some((rx) => Math.abs(rx - x) <= TOL)).length;
     let cols = uniqueSorted(group.flatMap((r) => r.xs)).filter((x) => {
-      const starts = group.filter((r) => r.xs.some((rx) => Math.abs(rx - x) <= TOL)).length;
-      const crossed = rowWords.filter((ws) => straddles(ws, x)).length;
-      return crossed < Math.min(2, starts) && !straddles(rowWords[0]!, x);
+      // Start of the text piece (span or run of lines) holding each word
+      // that crosses x.
+      const crossing: number[] = [];
+      group.forEach((r, i) => {
+        const w = rowWords[i]!.find((w) => w[0] < x - CROSS_MIN && w[2] > x + CROSS_MIN);
+        if (!w) return;
+        const box = r.boxes.find((b) => b.x0 <= w[0] + TOL && b.x1 >= w[2] - TOL);
+        crossing.push(box ? box.x0 : w[0]);
+      });
+      if (!crossing.length) return true;
+      if (straddles(rowWords[0]!, x)) return false;
+      if (crossing.length >= Math.min(2, startCount(x))) return false;
+      return crossing.every((x0) => startCount(x0) >= 2);
     });
     if (cols.length < 2) continue;
     const rowYs: number[] = [];
@@ -879,8 +893,10 @@ function findTablesByText(blocks: Block[], clip: Rect): TableData[] {
       const labels = touching.filter(oneColumn);
       for (const l of labels) {
         top = Math.min(top, l.y0);
+        left = Math.min(left, l.x0);
         right = Math.max(right, l.x1);
       }
+      cols = [left, ...cols.filter((x) => x > left + TOL)];
       // Anything else the table's top edge would cut stays above it.
       const labelSet = new Set(labels);
       for (const l of lines) {

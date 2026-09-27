@@ -573,3 +573,14 @@ test("tables: text strategy leaves a paragraph touching a table outside it", () 
   expect(tables.map((t) => tableRows(t.to_markdown()))).toEqual([rows]);
   expect(tables[0]!.bbox[1]).toBeGreaterThanOrEqual(1);
 });
+
+test("tables: text strategy, one wider right-aligned value in a headerless table", () => {
+  const rows = [
+    ["Alice", "North", "82"],
+    ["Bob", "South", "45"],
+    ["Carol", "West", "191"],
+    ["Dan", "East", "37"],
+  ];
+  const x = (c: number, v: string) => (c === 2 ? 250 - v.length * 5 : [0, 100][c]!);
+  expect(textTables(cellBlocks(rows, x))).toEqual([rows]);
+});
