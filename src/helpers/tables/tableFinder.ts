@@ -406,9 +406,13 @@ function joinCellLines(txt: string): string {
   return txt.replace(/(\p{L})-\n(?=\p{L})/gu, "$1-").replace(/\n/g, " ");
 }
 
-/** A literal `|` in cell text would split the markdown cell in two. */
+/**
+ * A literal `|` in cell text would split the markdown cell in two. A
+ * backslash before a `|` or at the end of the cell would escape the
+ * delimiter, so it is escaped as well.
+ */
 function escapeMarkdownCell(txt: string): string {
-  return txt.replace(/(?<!\\)\|/g, "\\|");
+  return txt.replace(/\\(?=\||$)|\|/g, (m) => "\\" + m);
 }
 
 class Table implements TableData {
@@ -567,15 +571,18 @@ type TextRow = {
   xs: number[];
   /** Number of MuPDF lines the row was assembled from. */
   nLines: number;
-  /** The row's text pieces: its spans, or its lines when it has several. */
+  /** The row's text pieces: its spans, or its runs of lines when it has several. */
   boxes: Rect[];
+  /** The MuPDF line boxes the row was assembled from. */
+  lines: Rect[];
 };
 
 /**
  * Group the text lines inside `clip` into visual rows. Lines that share most
  * of their height and do not overlap horizontally belong to the same row, no
  * matter how MuPDF split them into blocks and lines — some producers emit one
- * line per table cell rather than one line with a span per cell.
+ * line per table cell rather than one line with a span per cell. A line that
+ * repeats one already in the row (overprinted "fake bold") is dropped.
  *
  * A row made of one line keeps a column start per span. In a row made of
  * several lines, lines closer than twice the line height form one run with a
@@ -594,14 +601,24 @@ function textRows(blocks: Block[], clip: Rect): { rows: TextRow[]; lines: Rect[]
   }
   lines.sort((a, b) => a.rect.y0 - b.rect.y0 || a.rect.x0 - b.rect.x0);
 
+  const vOverlap = (a: Rect, b: Rect) =>
+    Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) >= Math.min(a.height, b.height) / 2;
+  const hOverlap = (a: Rect, b: Rect) => Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
   const groups: { rect: Rect; members: (typeof lines)[number][] }[] = [];
   for (const l of lines) {
     const r = l.rect;
-    const group = groups.find((g) => {
-      const overlap = Math.min(g.rect.y1, r.y1) - Math.max(g.rect.y0, r.y0);
-      if (overlap < Math.min(g.rect.height, r.height) / 2) return false;
-      return g.members.every((m) => m.rect.x1 <= r.x0 + TOL || r.x1 <= m.rect.x0 + TOL);
-    });
+    const dup = groups.some((g) =>
+      g.members.some(
+        (m) =>
+          Math.abs(m.rect.y0 - r.y0) <= 1 &&
+          Math.abs(m.rect.x0 - r.x0) <= 2 &&
+          hOverlap(m.rect, r) >= Math.min(m.rect.width, r.width) * 0.8,
+      ),
+    );
+    if (dup) continue;
+    const group = groups.find(
+      (g) => vOverlap(g.rect, r) && g.members.every((m) => hOverlap(m.rect, r) <= TOL),
+    );
     if (group) {
       group.rect = group.rect.union(r);
       group.members.push(l);
@@ -613,60 +630,115 @@ function textRows(blocks: Block[], clip: Rect): { rows: TextRow[]; lines: Rect[]
   const rows: TextRow[] = groups.map((g) => {
     if (g.members.length === 1) {
       const m = g.members[0]!;
-      return { rect: g.rect, xs: m.xs, nLines: 1, boxes: m.spans };
+      return { rect: g.rect, xs: m.xs, nLines: 1, boxes: m.spans, lines: [m.rect] };
     }
     const members = g.members.sort((a, b) => a.rect.x0 - b.rect.x0);
-    const xs: number[] = [];
-    let prevX1 = -Infinity;
+    const runs: Rect[] = [];
     for (const m of members) {
-      if (m.rect.x0 - prevX1 >= Math.max(m.rect.height, g.rect.height) * 2) xs.push(m.rect.x0);
-      prevX1 = Math.max(prevX1, m.rect.x1);
+      const last = runs[runs.length - 1];
+      const minGap = Math.max(m.rect.height, g.rect.height) * 2;
+      if (last && m.rect.x0 - last.x1 < minGap) runs[runs.length - 1] = last.union(m.rect);
+      else runs.push(m.rect);
     }
-    return { rect: g.rect, xs, nLines: members.length, boxes: members.map((m) => m.rect) };
+    return {
+      rect: g.rect,
+      xs: runs.map((r) => r.x0),
+      nLines: members.length,
+      boxes: runs,
+      lines: members.map((m) => m.rect),
+    };
   });
   rows.sort((a, b) => a.rect.y0 - b.rect.y0 || a.rect.x0 - b.rect.x0);
   return { rows, lines: lines.map((l) => l.rect) };
 }
 
+const median = (v: number[]) => [...v].sort((a, b) => a - b)[v.length >> 1] ?? 0;
+
+/**
+ * Rows assembled from several lines whose runs fill most of the distance to
+ * the next run are columns of running text, not table cells: a cell rarely
+ * takes more than about half of its column pitch, a line of prose nearly all.
+ */
+function looksLikeProse(group: TextRow[]): boolean {
+  const multi = group.filter((r) => r.nLines > 1 && r.boxes.length > 1);
+  if (multi.length * 2 < group.length) return false;
+  const fill = multi.map((r) => {
+    const runs = r.boxes;
+    let sum = 0;
+    for (let i = 0; i + 1 < runs.length; i++) {
+      sum += runs[i]!.width / Math.max(runs[i + 1]!.x0 - runs[i]!.x0, 1);
+    }
+    return sum / (runs.length - 1);
+  });
+  return median(fill) > 0.6;
+}
+
 /**
  * The header directly above a table body, as one x-interval per header
- * column. Header lines are collected upwards from the body while the
- * vertical gap stays within the body's own row spacing; a label that wraps
- * over several lines joins the column it overlaps. The walk stops at a line
- * spanning two columns (a caption or a group label).
+ * column. Header lines are taken band by band (lines on the same height)
+ * upwards from the body while the vertical gap stays within the body's own
+ * row spacing; a label that wraps over several lines joins the column it
+ * overlaps. The walk stops before a band with a line spanning two columns
+ * (a caption or a group label). Lines that touch the body's first row but sit
+ * mostly above it count as header lines too.
  */
 function headerAbove(lines: Rect[], group: TextRow[]): { cols: Rect[]; lines: Rect[] } {
   const x0 = Math.min(...group.map((r) => r.rect.x0));
   const x1 = Math.max(...group.map((r) => r.rect.x1));
-  const median = (v: number[]) => v.sort((a, b) => a - b)[v.length >> 1] ?? 0;
   const rowH = median(group.map((r) => r.rect.height));
   const gap = median(group.slice(1).map((r, i) => r.rect.y0 - group[i]!.rect.y1));
-  const maxGap = Math.max(gap, 0) + rowH;
-  const top = group[0]!.rect.y0;
+  const maxGap = Math.max(gap, 0) + rowH * 0.75;
+  const first = group[0]!.rect;
+  const body = new Set(group.flatMap((r) => r.lines));
   const candidates = lines
     .filter(
       (l) =>
-        l.y1 <= top + TOL &&
-        l.y0 >= top - rowH * 6 &&
+        !body.has(l) &&
+        l.y0 < first.y0 &&
+        l.y1 < (first.y0 + first.y1) / 2 &&
+        l.y0 >= first.y0 - rowH * 6 &&
         l.x0 >= x0 - rowH * 4 &&
         l.x1 <= x1 + rowH * 4,
     )
     .sort((a, b) => b.y1 - a.y1);
-  const cols: Rect[] = [];
-  const used: Rect[] = [];
-  let edge = top;
+
+  // Bands of lines on the same height, bottom-up.
+  const bands: Rect[][] = [];
   for (const l of candidates) {
-    if (l.y1 < edge - maxGap) break;
-    const hit = cols.filter((c) => c.x0 < l.x1 - TOL && l.x0 < c.x1 - TOL);
-    if (hit.length > 1) break;
-    if (hit.length === 1) cols[cols.indexOf(hit[0]!)] = hit[0]!.union(l);
-    else cols.push(l);
-    used.push(l);
-    edge = Math.min(edge, l.y0);
+    const band = bands.find((b) =>
+      b.some(
+        (m) => Math.min(m.y1, l.y1) - Math.max(m.y0, l.y0) >= Math.min(m.height, l.height) / 2,
+      ),
+    );
+    if (band) band.push(l);
+    else bands.push([l]);
+  }
+
+  let cols: Rect[] = [];
+  const used: Rect[] = [];
+  let edge = first.y0;
+  for (const band of bands) {
+    if (edge - Math.max(...band.map((l) => l.y1)) > maxGap) break;
+    const next = [...cols];
+    let spans = false;
+    for (const l of band) {
+      const hit = next.filter((c) => c.x0 < l.x1 - TOL && l.x0 < c.x1 - TOL);
+      if (hit.length > 1) spans = true;
+      else if (hit.length === 1) next[next.indexOf(hit[0]!)] = hit[0]!.union(l);
+      else next.push(l);
+    }
+    if (spans) break;
+    cols = next;
+    used.push(...band);
+    edge = Math.min(edge, ...band.map((l) => l.y0));
   }
   cols.sort((a, b) => a.x0 - b.x0);
   return { cols, lines: used };
 }
+
+/** Does some word cross the vertical line x (by more than CROSS_MIN on each side)? */
+const straddles = (words: BBox[], x: number) =>
+  words.some((w) => w[0] < x - CROSS_MIN && w[2] > x + CROSS_MIN);
 
 /**
  * Column boundaries from a header: between two neighbouring labels, the
@@ -699,11 +771,12 @@ function headerBoundaries(cols: Rect[], words: BBox[]): number[] {
  *
  * Approach: group the page's text into visual rows, cluster adjacent rows
  * that share column-start x-coordinates (within a small tolerance) into
- * table bodies, then look for a header directly above each body. When most
- * header columns receive body text, the header defines the columns (body
- * cells are often right-aligned or centred under their label, so their
- * starts do not line up); otherwise the body's column starts are used. Row
- * boundaries lie halfway between neighbouring rows.
+ * table bodies. A column start that falls inside a word of another row is
+ * dropped, so right-aligned or centred cells do not split their column.
+ * A header directly above a body (labels wrapped over several lines, which
+ * do not align with the body) defines the columns when most of its columns
+ * receive body text. A row boundary lies just above the next row, so the
+ * wrapped continuation of a cell stays in its row.
  *
  * This is a deliberately lightweight port — `pymupdf4llm.helpers.utils`
  * does a deeper analysis. For tables with no rules it produces a usable
@@ -741,20 +814,20 @@ function findTablesByText(blocks: Block[], clip: Rect): TableData[] {
   for (const group of clusters) {
     // Rows assembled from separate lines are a weaker signal than spans of
     // one line: ask for a third row before calling it a table.
-    if (group.length < 3 && group.some((r) => r.nLines > 1)) continue;
-    const bodyCols = uniqueSorted(group.flatMap((r) => r.xs));
-    if (bodyCols.length < 2) continue;
+    const multi = group.some((r) => r.nLines > 1);
+    if (multi && (group.length < 3 || looksLikeProse(group))) continue;
     let left = Math.min(...group.map((r) => r.rect.x0));
     let right = Math.max(...group.map((r) => r.rect.x1));
     let top = group[0]!.rect.y0;
+    const words = wordBoxes(blocks, new Rect(left, top, right, group[group.length - 1]!.rect.y1));
+    let cols = uniqueSorted(group.flatMap((r) => r.xs)).filter((x) => !straddles(words, x));
+    if (cols.length < 2) continue;
     const rowYs: number[] = [];
-    let cols = bodyCols;
 
     const header = headerAbove(lines, group);
-    const bodyArea = new Rect(left, top, right, group[group.length - 1]!.rect.y1);
-    const bounds =
-      header.cols.length >= 2 ? headerBoundaries(header.cols, wordBoxes(blocks, bodyArea)) : [];
-    // Accept the header when most of its columns receive body text.
+    const bounds = header.cols.length >= 2 ? headerBoundaries(header.cols, words) : [];
+    // Accept a header with at least as many columns as the body when most of
+    // its columns receive body text.
     const filled = header.cols.filter((_, i) => {
       const lo = i ? bounds[i - 1]! : -Infinity;
       const hi = bounds[i] ?? Infinity;
@@ -762,18 +835,42 @@ function findTablesByText(blocks: Block[], clip: Rect): TableData[] {
         r.boxes.some((b) => (b.x0 + b.x1) / 2 >= lo && (b.x0 + b.x1) / 2 < hi),
       );
     }).length;
-    if (header.cols.length >= 2 && filled >= 2 && filled * 2 >= header.cols.length) {
+    const accept =
+      header.cols.length >= Math.max(2, cols.length) &&
+      filled >= 2 &&
+      filled * 2 >= header.cols.length;
+    if (accept) {
       left = Math.min(left, header.cols[0]!.x0);
       right = Math.max(right, ...header.cols.map((c) => c.x1));
       cols = [left, ...bounds];
       top = Math.min(...header.lines.map((l) => l.y0));
       rowYs.push(top, (Math.max(...header.lines.map((l) => l.y1)) + group[0]!.rect.y0) / 2);
     } else {
+      // Text reaching into the first row from above (a label taller than
+      // the row) joins that row instead of being cut by the table's edge.
+      const firstY0 = group[0]!.rect.y0;
+      const taken = new Set<Rect>();
+      for (let grown = true; grown; ) {
+        grown = false;
+        for (const l of lines) {
+          if (taken.has(l) || l.y0 >= firstY0 || l.y1 <= top) continue;
+          if (l.x1 <= left || l.x0 >= right) continue;
+          taken.add(l);
+          top = Math.min(top, l.y0);
+          left = Math.min(left, l.x0);
+          right = Math.max(right, l.x1);
+          grown = true;
+        }
+      }
+      cols = [left, ...cols.filter((x) => x > left + TOL)];
       rowYs.push(top);
     }
-    // Row boundaries halfway between neighbouring rows: no empty gap rows.
+    // A row boundary sits just above the next row (between the rows when
+    // they are tight), so lines wrapped below a cell stay in its row.
     for (let i = 1; i < group.length; i++) {
-      rowYs.push((group[i - 1]!.rect.y1 + group[i]!.rect.y0) / 2);
+      const prevY1 = group[i - 1]!.rect.y1;
+      const y0 = group[i]!.rect.y0;
+      rowYs.push(Math.max((prevY1 + y0) / 2, y0 - 1));
     }
     const bottom = group[group.length - 1]!.rect.y1 + 1;
     rowYs.push(bottom);
@@ -781,15 +878,27 @@ function findTablesByText(blocks: Block[], clip: Rect): TableData[] {
     const allCols = [...cols, right + 1];
     const bbox = new Rect(allCols[0]!, top, right + 1, bottom);
     const hRecs = rowYs.map((y) => ({ y, x0: bbox.x0, x1: bbox.x1 }));
-    const vRecs = allCols.map((x) => ({ x, y0: bbox.y0, y1: bbox.y1 }));
+    // A label in the first row that crosses a column boundary (a group
+    // label over several columns) opens that boundary so the cells merge.
+    const firstRow = wordBoxes(blocks, new Rect(bbox.x0, top, bbox.x1, rowYs[1]!)).filter(
+      (w) => (w[1] + w[3]) / 2 < rowYs[1]!,
+    );
+    const vRecs = allCols.map((x) => ({
+      x,
+      y0: straddles(firstRow, x) ? rowYs[1]! : bbox.y0,
+      y1: bbox.y1,
+    }));
     const t = new Table(blocks, { bbox, hLines: hRecs, vLines: vRecs });
     if (t.row_count >= 2 && t.col_count >= 2) out.push(t);
   }
   // Rows of a wrapped header can form a small table of their own; drop any
-  // table that lies inside another one.
-  const inside = (a: TableData, b: TableData) =>
-    a !== b && Rect.from(b.bbox).contains(Rect.from(a.bbox));
-  const kept = out.filter((t) => !out.some((o) => inside(t, o)));
+  // table that lies inside another one (the later one of two equal tables).
+  const kept = out.filter((t, i) =>
+    out.every((o, j) => {
+      if (i === j || !Rect.from(o.bbox).contains(Rect.from(t.bbox))) return true;
+      return Rect.from(t.bbox).contains(Rect.from(o.bbox)) && i < j;
+    }),
+  );
   kept.sort((a, b) => a.bbox[0] - b.bbox[0] || a.bbox[1] - b.bbox[1]);
   return kept;
 }

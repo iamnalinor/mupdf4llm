@@ -29,10 +29,10 @@ toMarkdown(buf, { tableStrategy: "lines" });
 lines are first grouped into visual rows, so it does not matter whether
 the PDF stores a row as one line with a span per cell or as one line (or
 block) per cell. A contiguous run of rows sharing ≥2 column starts is a
-table body. A header directly above the body — labels may wrap over
-several lines — defines the columns, so right-aligned or centred cells
-stay in their column; the boundary between two labels is placed where no
-body word crosses it.
+table body; a start that falls inside a word of another row (a
+right-aligned or centred cell) is ignored. A header directly above the
+body whose labels wrap over several lines defines the columns: the
+boundary between two labels is placed where no body word crosses it.
 
 Lightweight port — for tables with no rules it produces a usable grid
 but the column boundaries are heuristic and may not byte-match PyMuPDF.
