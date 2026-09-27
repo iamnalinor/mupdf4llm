@@ -133,6 +133,76 @@ test("PageRaster.crop drops empty cells and trims ruling lines", () => {
   expect(Array.from(img.png().slice(1, 4))).toEqual([0x50, 0x4e, 0x47]); // "PNG"
 });
 
+test("PageRaster.crop trims a skewed rule piece off the crop edge", () => {
+  // 300 dpi. A cell whose thin side rules lean 3° and fall just inside the
+  // cell's 1 pt margin all the way down: a sliver along each edge that no
+  // single pixel column holds for more than a third of the height.
+  const scale = 300 / 72;
+  const W = 320;
+  const H = 200;
+  const data = new Uint8Array(W * H).fill(255);
+  const lean = Math.tan((3 * Math.PI) / 180);
+  for (let y = 0; y < H; y++) {
+    const left = Math.round(17 + y * lean);
+    const right = Math.round(260 - y * lean);
+    for (let d = 0; d < 2; d++) data[y * W + left + d] = data[y * W + right + d] = 0;
+  }
+  // Two lines of "text" in the middle of the cell.
+  for (const top of [60, 120])
+    for (let g = 0; g < 8; g++)
+      for (let y = top; y < top + 24; y++)
+        for (let x = 60 + g * 22; x < 72 + g * 22; x++) data[y * W + x] = 0;
+  const r = new PageRaster(data, W, H, scale);
+  const img = r.crop(new Rect(12 / scale, 0, 266 / scale, H / scale))!;
+  // A strip 2 pt wide at either edge of the ink (past the white margin)
+  // holds ink in only a few rows: the text, not a rule.
+  const rowsWithInk = (x0: number, x1: number) => {
+    let n = 0;
+    for (let y = 0; y < img.height; y++) {
+      for (let x = x0; x < x1; x++) {
+        if (img.data[y * img.width + x]! < 128) {
+          n++;
+          break;
+        }
+      }
+    }
+    return n / img.height;
+  };
+  let first = 0;
+  let last = img.width - 1;
+  const colInk = (x: number) => {
+    for (let y = 0; y < img.height; y++) if (img.data[y * img.width + x]! < 128) return true;
+    return false;
+  };
+  while (!colInk(first)) first++;
+  while (!colInk(last)) last--;
+  const strip = Math.ceil(2 * scale);
+  expect(rowsWithInk(first, first + strip)).toBeLessThan(0.5);
+  expect(rowsWithInk(last - strip + 1, last + 1)).toBeLessThan(0.5);
+});
+
+test("PageRaster.crop keeps text that touches the crop edge", () => {
+  const scale = 300 / 72;
+  const W = 320;
+  const H = 200;
+  const data = new Uint8Array(W * H).fill(255);
+  // Two lines of text, the first glyph of each right at the cell's margin.
+  for (const top of [50, 110])
+    for (let g = 0; g < 8; g++)
+      for (let y = top; y < top + 40; y++)
+        for (let x = 17 + g * 22; x < 29 + g * 22; x++) data[y * W + x] = 0;
+  const img = new PageRaster(data, W, H, scale).crop(
+    new Rect(12 / scale, 0, 266 / scale, H / scale),
+  )!;
+  // White margin, then the whole first glyph (12 px) is still there.
+  const first = Array.from({ length: img.width }, (_, x) => x).find((x) =>
+    Array.from({ length: img.height }, (_, y) => y).some((y) => img.data[y * img.width + x]! < 128),
+  )!;
+  let glyph = 0;
+  for (let x = first; x < img.width && img.data[70 * img.width + x]! < 128; x++) glyph++;
+  expect(glyph).toBe(12);
+});
+
 test("looksBroken: a stray letter of another script inside a word", () => {
   // One letter of another script inside a word: a broken text layer.
   expect(looksBroken("И" + "c" + "тория искусств")).toBe(true); // Latin c in Cyrillic
