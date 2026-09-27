@@ -69,9 +69,11 @@ tests/
   fixtures.test.ts          synthetic (exact) + vendored (tiered) parity fixtures
   units.test.ts             unit tests for utils, geometry, progress, headers
   fixtures/                 vendored real-world PDFs (public domain / MIT)
+                            + synthetic table-grid PDFs (see make-table-fixtures.ts)
 docs/                       VitePress + TypeDoc documentation site
 scripts/
   probe.ts / probe.py       manual diff helpers
+  make-table-fixtures.ts    regenerates the synthetic table-grid fixtures
 ```
 
 Every public function should keep parity with its Python counterpart;

@@ -61,6 +61,14 @@ export interface DrawingPath {
   filled: boolean;
 }
 
+/**
+ * A ruling line recovered from vector graphics, stored as its centerline in
+ * page coordinates. `width` is the visual line thickness.
+ */
+export type DrawingEdge =
+  | { kind: "h"; x0: number; x1: number; y: number; width: number }
+  | { kind: "v"; x: number; y0: number; y1: number; width: number };
+
 export interface ImageInfo {
   bbox: Rect;
   width: number;
