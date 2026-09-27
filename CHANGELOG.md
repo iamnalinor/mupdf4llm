@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed (breaking)
 
+- ESM only: the CommonJS build (`dist/*.cjs`, the `require` export
+  condition) is removed. It could not be loaded anyway — `mupdf` uses
+  top-level await, which `require()` rejects. From CommonJS use
+  `await import("@nalinor/mupdf4llm")`.
+
 - `toMarkdown` and `toMarkdownPages` are async and return a `Promise`:
   write `await toMarkdown(buf)`. The markdown for the same options is
   unchanged; `PageChunk.tables[]` gains a `cells` field (additive).

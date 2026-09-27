@@ -25,19 +25,17 @@
     "url": "https://github.com/iamnalinor/mupdf4llm/issues"
   },
   "type": "module",
-  "main": "./dist/index.cjs",
+  "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": "./dist/index.js"
     },
     "./llama": {
       "types": "./dist/llama/pdfMarkdownReader.d.ts",
-      "import": "./dist/llama.js",
-      "require": "./dist/llama.cjs"
+      "import": "./dist/llama.js"
     }
   },
   "peerDependencies": {
@@ -69,7 +67,7 @@
     "lint:check": "prettier --check . && eslint . && tsc --noEmit",
     "build": "bun run build:clean && bun run build:js && bun run build:dts",
     "build:clean": "rm -rf dist",
-    "build:js": "bun build src/index.ts --target=node --format=esm --outfile=dist/index.js --external mupdf --external ppu-paddle-ocr --external onnxruntime-node && bun build src/index.ts --target=node --format=cjs --outfile=dist/index.cjs --external mupdf --external ppu-paddle-ocr --external onnxruntime-node && bun build src/llama/pdfMarkdownReader.ts --target=node --format=esm --outfile=dist/llama.js --external mupdf --external ppu-paddle-ocr --external onnxruntime-node --external llamaindex && bun build src/llama/pdfMarkdownReader.ts --target=node --format=cjs --outfile=dist/llama.cjs --external mupdf --external ppu-paddle-ocr --external onnxruntime-node --external llamaindex",
+    "build:js": "bun build src/index.ts --target=node --format=esm --outfile=dist/index.js --external mupdf --external ppu-paddle-ocr --external onnxruntime-node && bun build src/llama/pdfMarkdownReader.ts --target=node --format=esm --outfile=dist/llama.js --external mupdf --external ppu-paddle-ocr --external onnxruntime-node --external llamaindex",
     "build:dts": "tsc -p tsconfig.build.json",
     "docs:api": "typedoc",
     "docs:dev": "bun run docs:api && vitepress dev docs",

@@ -29,6 +29,10 @@ bun add @nalinor/mupdf4llm
 Requires Node 20+ or Bun ≥ 1.0. The only runtime dependency is `mupdf`
 (WASM, no native build).
 
+The package is ESM only (`import`). From CommonJS code, load it with
+`const { toMarkdown } = await import("@nalinor/mupdf4llm")`: its `mupdf`
+dependency uses top-level await, which `require()` cannot load.
+
 ## Quick start
 
 ```ts
@@ -90,7 +94,7 @@ pip install pymupdf4llm   # required for the parity test suite
 bun test                  # parity + unit tests
 bun run lint              # prettier --write + eslint + tsc
 bun run docs:dev          # local doc preview at http://localhost:5173
-bun run build             # emits dist/{index,llama}.{js,cjs,d.ts}
+bun run build             # emits dist/{index,llama}.{js,d.ts}
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for release workflow and project layout.

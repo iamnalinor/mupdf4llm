@@ -3,6 +3,9 @@
 ## Requirements
 
 - **Node ≥ 20** or **Bun ≥ 1.0**
+- ESM only: use `import`. From CommonJS, `await import("@nalinor/mupdf4llm")`
+  (the `mupdf` dependency uses top-level await, which `require()` cannot
+  load).
 - The only runtime dependency is [`mupdf`](https://www.npmjs.com/package/mupdf)
   (Artifex's official WASM bindings). No native build, no system libs.
 - Optional, only for [OCR of table cells](/guide/ocr) with the default

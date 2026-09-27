@@ -23,7 +23,7 @@ Inner loop:
 bun test               # 15 tests across parity, real fixtures, units
 bun run lint           # prettier --write . && eslint . && tsc --noEmit
 bun run lint:check     # CI-style — fails on style drift instead of fixing it
-bun run build          # emits dist/{index,llama}.{js,cjs,d.ts}
+bun run build          # emits dist/{index,llama}.{js,d.ts}
 ```
 
 The `scan-*.pdf` fixtures are real scans in the public domain, taken from
