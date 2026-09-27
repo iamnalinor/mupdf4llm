@@ -2,6 +2,7 @@ import { test, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import * as mupdf from "mupdf";
 import { Rect } from "../src/helpers/geometry";
+import type { BBox } from "../src/helpers/geometry";
 import {
   clusterStripes,
   computeReadingOrder,
@@ -15,6 +16,8 @@ import { getKeyValues } from "../src/helpers/forms/formFields";
 import { toMarkdown, toMarkdownPages } from "../src/index";
 import type { MarkdownElement } from "../src/index";
 import { PDFMarkdownReader } from "../src/llama/pdfMarkdownReader";
+import { findTables } from "../src/helpers/tables/tableFinder";
+import type { Block, Line, Span } from "../src/helpers/types";
 
 function openFixture(name: string): mupdf.PDFDocument {
   return mupdf.PDFDocument.openDocument(
@@ -243,7 +246,7 @@ function tableRows(md: string): string[][] {
   return md
     .split("\n")
     .filter((l) => l.startsWith("|") && !/^\|(---\|)+$/.test(l))
-    .map((l) => l.slice(1, -1).split("|"));
+    .map((l) => l.slice(1, -1).split(/(?<!\\)\|/));
 }
 
 test("tables: grid stroked as one compound path, continued over two pages", () => {
@@ -331,4 +334,253 @@ test("tables: white rules on shading, header-only column rules, rounded border",
   for (const [i, first] of ["Shaded", "Header", "Rounded"].entries()) {
     expect(tableRows(pages[i]!)).toEqual([[first, "Label", "Value"], ...body]);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Text strategy
+// ---------------------------------------------------------------------------
+
+function textTableRows(name: string): string[][] {
+  const buf = new Uint8Array(readFileSync(`tests/fixtures/${name}`));
+  const pages = toMarkdownPages(buf, { tableStrategy: "text", elements: ["table"] });
+  return pages.flatMap((p) => tableRows(p.text));
+}
+
+test("tables: text strategy, each cell of a row is its own text line", () => {
+  expect(textTableRows("split-line-rows.pdf")).toEqual([
+    [
+      "Name",
+      "Grade",
+      "Team name",
+      "Round one, points in Physics",
+      "Round one, points in Biology",
+      "Team round, points",
+      "Total",
+    ],
+    ["Alice Brown", "11", "North \\| Blue", "22,5", "24,0", "88,5", "62,40"],
+    ["Bob Green", "11", "North \\| Blue", "26,5", "10,0", "88,5", "60,40"],
+    ["Carol White", "10", "Tasters", "19,5", "14,0", "86,5", "58,60"],
+    ["David Black", "9", "Tasters", "8,0", "21,5", "86,5", "55,15"],
+    ["Eve Grey", "11", "Blenders", "17,0", "6,5", "71,0", "49,90"],
+  ]);
+});
+
+test("tables: text strategy, centred cells under a one-line header, no false tables in prose", () => {
+  // Pages 1-2 are two-column prose, page 3 holds a ruleless table.
+  expect(textTableRows("multicolumn.pdf")).toEqual([
+    ["Country", "Population (millions)", "Area (km2)", "Capital", "Official Language"],
+    ["Austria", "8.9", "83,879", "Vienna", "German"],
+    ["Belgium", "11.5", "30,689", "Brussels", "Dutch, French, German"],
+    ["Czech Republic", "10.7", "78,866", "Prague", "Czech"],
+    ["Denmark", "5.8", "42,951", "Copenhagen", "Danish"],
+    ["Finland", "5.5", "338,424", "Helsinki", "Finnish, Swedish"],
+  ]);
+});
+
+/** A one-span text line with 5pt-wide glyphs. */
+function textLine(text: string, x: number, y: number): Line {
+  const chars = [...text].map((c, i) => ({
+    c,
+    bbox: [x + i * 5, y, x + (i + 1) * 5, y + 8] as [number, number, number, number],
+  }));
+  const span = {
+    bbox: new Rect(x, y, x + text.length * 5, y + 8),
+    text,
+    font: "Test",
+    size: 8,
+    color: 0,
+    flags: 0,
+    char_flags: 0,
+    alpha: 255,
+    ascender: 1,
+    descender: 0,
+    origin: [x, y + 8],
+    chars,
+  } as Span;
+  return { bbox: [x, y, x + text.length * 5, y + 8], dir: [1, 0], wmode: 0, spans: [span] };
+}
+
+test("tables: text strategy, every cell in its own block", () => {
+  const cols = [0, 100, 150, 220];
+  const rows = [
+    ["Name", "Grade", "Team", "Score"],
+    ["Alice", "10", "North", "91"],
+    ["Bob", "11", "South", "82"],
+    ["Carol", "9", "West", "73"],
+  ];
+  const blocks: Block[] = rows.flatMap((values, r) =>
+    values.map((v, c) => {
+      const line = textLine(v, cols[c]!, r * 12);
+      return { type: 0 as const, bbox: line.bbox, lines: [line] };
+    }),
+  );
+  const [table, ...rest] = findTables(blocks, [], new Rect(0, 0, 300, 100), { strategy: "text" });
+  expect(rest).toEqual([]);
+  expect(tableRows(table!.to_markdown())).toEqual(rows);
+});
+
+/** One block per cell; `x(c, text)` gives the cell's x0. */
+function cellBlocks(rows: string[][], x: (c: number, text: string) => number, y0 = 0): Block[] {
+  return rows.flatMap((values, r) =>
+    values.map((v, c) => {
+      const line = textLine(v, x(c, v), y0 + r * 12);
+      return { type: 0 as const, bbox: line.bbox, lines: [line] };
+    }),
+  );
+}
+
+const textTables = (blocks: Block[]) =>
+  findTables(blocks, [], new Rect(-100, -100, 1000, 1000), { strategy: "text" }).map((t) =>
+    tableRows(t.to_markdown()),
+  );
+
+test("tables: text strategy, right-aligned numbers under a one-line header", () => {
+  const rows = [
+    ["Name", "Grade", "Team", "Points"],
+    ["Alice", "10", "North", "191"],
+    ["Bob", "9", "South", "82"],
+    ["Carol", "11", "West", "7"],
+  ];
+  // Header labels left-aligned, numbers right-aligned at x=125 and x=250.
+  const x = (c: number, v: string) =>
+    v === rows[0]![c]
+      ? [0, 100, 150, 220][c]!
+      : c === 1
+        ? 125 - v.length * 5
+        : c === 3
+          ? 250 - v.length * 5
+          : [0, 100, 150, 220][c]!;
+  expect(textTables(cellBlocks(rows, x))).toEqual([rows]);
+});
+
+test("tables: text strategy keeps stacked tables apart", () => {
+  const a = [
+    ["Key", "Value", "Unit"],
+    ["alpha", "1", "m"],
+    ["beta", "2", "s"],
+  ];
+  const b = [
+    ["Code", "Qty", "Price", "Note"],
+    ["X1", "5", "9.99", "ok"],
+    ["X2", "7", "1.50", "no"],
+    ["X3", "2", "3.10", "ok"],
+  ];
+  const blocks = [
+    ...cellBlocks(a, (c) => [0, 120, 200][c]!),
+    ...cellBlocks(b, (c) => [0, 60, 110, 170][c]!, 44),
+  ];
+  expect(textTables(blocks)).toEqual([a, b]);
+});
+
+test("tables: text strategy ignores three columns of prose", () => {
+  // Gutters wider than twice the line height, lines ragged by up to 15pt.
+  const blocks: Block[] = [];
+  for (let c = 0; c < 3; c++) {
+    const lines = Array.from({ length: 40 }, (_, i) =>
+      textLine(
+        "lorem ipsum dolor sit amet, consectetuer".slice(0, 29 + ((i + c) % 4)),
+        c * 185,
+        i * 11,
+      ),
+    );
+    blocks.push({ type: 0, bbox: [c * 185, 0, c * 185 + 160, 440], lines });
+  }
+  expect(textTables(blocks)).toEqual([]);
+});
+
+test("tables: text strategy ignores an overprinted (fake bold) header copy", () => {
+  const rows = [
+    ["Name", "Grade", "Team", "Score"],
+    ["Alice", "10", "North", "91"],
+    ["Bob", "11", "South", "82"],
+    ["Carol", "9", "West", "73"],
+  ];
+  const cols = [0, 100, 150, 220];
+  const blocks = cellBlocks(rows, (c) => cols[c]!);
+  const copy = cellBlocks([rows[0]!], (c) => cols[c]! + 0.4);
+  const [table] = findTables([...blocks, ...copy], [], new Rect(-100, -100, 1000, 1000), {
+    strategy: "text",
+  });
+  expect(table!.row_count).toBe(4);
+});
+
+test("tables: text strategy keeps a header that reaches into the first row", () => {
+  // "No", "Name" and "Total" are taller than the T1..T3 row they touch; the
+  // group label above T1..T3 spans columns and stays outside the table.
+  const buf = new Uint8Array(readFileSync("tests/fixtures/merged-cells-grid.pdf"));
+  const [page] = toMarkdownPages(buf, { tableStrategy: "text" });
+  const rows = tableRows(page!.text);
+  expect(rows[0]).toEqual(["No", "Name", "T1", "T2", "T3", "Total"]);
+  expect(page!.text).toContain("Results per task");
+  expect(rows[1]).toEqual(["1", "Member 1", "1", "4", "6", "11"]);
+});
+
+test("tables: markdown escaping of | and trailing backslashes in cells", () => {
+  const rows = [
+    ["Path", "Rule", "Note"],
+    ["C:\\dir\\", "a|b", "x\\|y"],
+    ["D:\\", "c", "d"],
+  ];
+  const md = findTables(
+    cellBlocks(rows, (c) => [0, 100, 200][c]!),
+    [],
+    new Rect(-100, -100, 1000, 1000),
+    {
+      strategy: "text",
+    },
+  )[0]!.to_markdown();
+  expect(md).toContain("|C:\\dir\\\\|a\\|b|x\\\\\\|y|");
+});
+
+test("tables: text strategy keeps a column that only a totals row crosses", () => {
+  const cols = [0, 100, 150, 220];
+  const lines = [
+    ["Item", "Qty", "Price", "Sum"],
+    ["Apple", "2", "1.00", "2.00"],
+    ["Pear", "3", "2.00", "6.00"],
+  ].map((values, r) => {
+    const spans = values.map((v, c) => textLine(v, cols[c]!, r * 12).spans[0]!);
+    return { bbox: [0, r * 12, 240, r * 12 + 8] as BBox, dir: [1, 0], wmode: 0, spans } as Line;
+  });
+  const total = textLine("Grand total incl. tax", 0, 36);
+  total.spans.push(textLine("13.00", 220, 36).spans[0]!);
+  const blocks: Block[] = [{ type: 0, bbox: [0, 0, 250, 44], lines: [...lines, total] }];
+  const [rows] = textTables(blocks);
+  expect(rows!.slice(0, 3)).toEqual([
+    ["Item", "Qty", "Price", "Sum"],
+    ["Apple", "2", "1.00", "2.00"],
+    ["Pear", "3", "2.00", "6.00"],
+  ]);
+});
+
+test("tables: text strategy leaves a paragraph touching a table outside it", () => {
+  const rows = [
+    ["Alice", "10", "North", "91"],
+    ["Bob", "11", "South", "82"],
+    ["Carol", "9", "West", "73"],
+  ];
+  // Paragraph lines 8pt apart, the last one reaching 1pt into the first row.
+  const para = [0, 1, 2].map((i) => {
+    const line = textLine("Paragraph text that runs across the page width " + i, 0, -23 + i * 8);
+    return { type: 0 as const, bbox: line.bbox, lines: [line] };
+  });
+  const tables = findTables(
+    [...para, ...cellBlocks(rows, (c) => [0, 100, 150, 220][c]!)],
+    [],
+    new Rect(-100, -100, 1000, 1000),
+    { strategy: "text" },
+  );
+  expect(tables.map((t) => tableRows(t.to_markdown()))).toEqual([rows]);
+  expect(tables[0]!.bbox[1]).toBeGreaterThanOrEqual(1);
+});
+
+test("tables: text strategy, one wider right-aligned value in a headerless table", () => {
+  const rows = [
+    ["Alice", "North", "82"],
+    ["Bob", "South", "45"],
+    ["Carol", "West", "191"],
+    ["Dan", "East", "37"],
+  ];
+  const x = (c: number, v: string) => (c === 2 ? 250 - v.length * 5 : [0, 100][c]!);
+  expect(textTables(cellBlocks(rows, x))).toEqual([rows]);
 });
