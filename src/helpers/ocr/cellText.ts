@@ -68,15 +68,32 @@ export function looksBroken(text: string): boolean {
  * cell; `"auto"` only cells whose text layer {@link looksBroken}. A cell
  * without ink is empty and not sent to the engine. When the engine throws or
  * returns nothing for a cell with ink, the cell is left empty with source
- * `"failed"` and processing continues.
+ * `"failed"` and processing continues. An {@link OcrSetupError} is raised,
+ * unless `keepLayer` is set: then the text layer stays as it is.
  */
 export async function ocrTableCells(
   tables: TableData[],
   source: TextSource,
   raster: PageRaster,
   engine: OcrEngine,
+  keepLayer = false,
 ): Promise<void> {
   if (source === "pdf") return;
+  try {
+    await ocrCells(tables, source, raster, engine);
+  } catch (e) {
+    if (!(keepLayer && e instanceof OcrSetupError)) throw e;
+    if (typeof process !== "undefined" && process.env?.DEBUG_MUPDF4LLM)
+      console.warn("[mupdf4llm] OCR unavailable, keeping the text layer:", e.message);
+  }
+}
+
+async function ocrCells(
+  tables: TableData[],
+  source: TextSource,
+  raster: PageRaster,
+  engine: OcrEngine,
+): Promise<void> {
   for (const tab of tables) {
     const texts = source === "auto" ? tab.cellTexts() : null;
     for (let r = 0; r < tab.row_count; r++) {

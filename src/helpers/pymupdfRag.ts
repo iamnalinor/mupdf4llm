@@ -27,6 +27,14 @@ import type {
   TableData,
 } from "./types";
 import type { OcrEngine } from "./ocr/engine";
+import type { Block } from "./types";
+
+/** Does the page have text in its PDF text layer (not a bare scan)? */
+export function hasTextLayer(blocks: Block[]): boolean {
+  return blocks.some(
+    (b) => b.type === 0 && b.lines.some((l) => l.spans.some((s) => s.text.trim())),
+  );
+}
 
 interface PageParams {
   page: mupdf.PDFPage;
@@ -375,7 +383,7 @@ async function convert(
   // paragraph stream instead of being dropped.
   const detectTables = opts.tableStrategy !== null && isEl("table");
   const strategy = opts.tableStrategy ?? "lines_strict";
-  const textSource = opts.textSource ?? (strategy === "pixels" ? "ocr" : "pdf");
+  const textSource = opts.textSource ?? "auto";
   const ocrDpi = opts.ocrDpi ?? 300;
 
   if (!writeImages && !embedImages && !forceText) {
@@ -462,7 +470,8 @@ async function convert(
             // text layer stays in the page's own (skewed) coordinates.
             if (pixels) {
               raster = PageRaster.render(page, ocrDpi);
-              if (textSource === "ocr") raster = raster.deskewed();
+              if (textSource === "ocr" || (textSource === "auto" && !hasTextLayer(td.blocks)))
+                raster = raster.deskewed();
             }
             tabs = raster
               ? tablesFromGrids(td.blocks, findPixelGrids(raster))
@@ -504,7 +513,10 @@ async function convert(
 
       if (tabs.length && textSource !== "pdf") {
         raster ??= PageRaster.render(page, ocrDpi);
-        await ocrTableCells(tabs, textSource, raster, ocr);
+        // The default "auto" only repairs the text layer: without an OCR
+        // engine it keeps that layer. A page without one has nothing to keep.
+        const keepLayer = opts.textSource === undefined && hasTextLayer(td.blocks);
+        await ocrTableCells(tabs, textSource, raster, ocr, keepLayer);
       }
 
       const parms: PageParams = {

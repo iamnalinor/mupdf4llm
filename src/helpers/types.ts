@@ -138,17 +138,18 @@ export interface MarkdownOptions {
   dpi?: number;
   /**
    * How tables are found. `"pixels"` finds ruling lines on the rendered page
-   * instead of in the PDF drawings, so it works on scans; it implies
-   * `textSource: "ocr"` unless `textSource` is given.
+   * instead of in the PDF drawings, so it works on scans.
    */
   tableStrategy?: "lines_strict" | "lines" | "text" | "explicit" | "pixels" | null;
   /**
    * Where table cell text comes from, independent of how the table was found:
-   * - `"pdf"`: the PDF text layer (default, except for `tableStrategy: "pixels"`).
-   * - `"ocr"`: OCR of every cell; the text layer is ignored (default for `"pixels"`).
-   * - `"auto"`: the text layer, and OCR for cells whose text is empty or looks
-   *   broken (replacement or private-use characters, a letter of another
-   *   script slipped into a word, mostly symbols).
+   * - `"pdf"`: the PDF text layer.
+   * - `"ocr"`: OCR of every cell; the text layer is ignored.
+   * - `"auto"` (default): the text layer, and OCR for cells whose text is
+   *   empty or looks broken (replacement or private-use characters, a letter
+   *   of another script slipped into a word, mostly symbols). On a page
+   *   without a text layer that is every cell. Left at the default, a page
+   *   with a text layer keeps it when no OCR engine can be set up.
    *
    * The source of each cell is reported in `PageChunk.tables[].cells`.
    */

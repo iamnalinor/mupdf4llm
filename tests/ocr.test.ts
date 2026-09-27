@@ -206,6 +206,19 @@ describe("pixels strategy on a scan", () => {
     expect(Math.abs(t.bbox[2] - 520)).toBeLessThan(1.5);
   });
 
+  test("auto deskews a page without a text layer, as ocr does", async () => {
+    const buf = degrade(fixture("scan-ru-census-1918.pdf"), { deg: 1.5 });
+    const crops = async (textSource: "auto" | "ocr") => {
+      const ocr = fakeEngine();
+      const pages = await toMarkdownPages(buf, { tableStrategy: "pixels", textSource, ocr });
+      return {
+        shapes: pages.flatMap((p) => p.tables.map((t) => [t.rows, t.columns])),
+        sizes: ocr.calls.map((i) => `${i.width}x${i.height}`),
+      };
+    };
+    expect(await crops("auto")).toEqual(await crops("ocr"));
+  }, 60_000);
+
   test("a failing engine marks cells as failed and keeps going", async () => {
     let n = 0;
     const ocr: OcrEngine = {
@@ -239,12 +252,43 @@ describe("pixels strategy on a scan", () => {
 describe("textSource on a vector grid with a broken text layer", () => {
   const pua = /[\uE000-\uF8FF]/u;
 
-  test('"pdf" (default) keeps the text layer', async () => {
-    const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"));
+  test('"pdf" keeps the text layer', async () => {
+    const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"), { textSource: "pdf" });
     const t = page!.tables[0]!;
     expect(t.cells[0]!.map((c) => c!.text)).toEqual(["No", "Region", "Count", "Share"]);
     expect(pua.test(t.cells[1]![1]!.text)).toBe(true);
     expect(t.cells.flat().every((c) => c?.source === "pdf")).toBe(true);
+  });
+
+  test("the default is auto: only the broken cells are OCRed", async () => {
+    const ocr = fakeEngine();
+    const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"), { ocr });
+    expect(ocr.calls.length).toBe(16);
+    expect(page!.tables[0]!.cells[0]!.map((c) => c!.source)).toEqual(["pdf", "pdf", "pdf", "pdf"]);
+    expect(pua.test(page!.text)).toBe(false);
+  });
+
+  test("the default auto keeps the text layer when OCR cannot be set up", async () => {
+    const ocr: OcrEngine = {
+      async recognize() {
+        throw new OcrSetupError("no models");
+      },
+    };
+    const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"), { ocr });
+    const t = page!.tables[0]!;
+    expect(t.cells[0]!.map((c) => c!.text)).toEqual(["No", "Region", "Count", "Share"]);
+    expect(t.cells.flat().every((c) => c?.source === "pdf")).toBe(true);
+  });
+
+  test('an explicit "auto" raises an OCR setup error', async () => {
+    const ocr: OcrEngine = {
+      async recognize() {
+        throw new OcrSetupError("no models");
+      },
+    };
+    expect(
+      toMarkdown(fixture("broken-text-grid.pdf"), { textSource: "auto", ocr }),
+    ).rejects.toThrow("no models");
   });
 
   test('"ocr" keeps the vector grid and OCRs every cell', async () => {
