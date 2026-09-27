@@ -5,6 +5,9 @@
 - **Node ≥ 20** or **Bun ≥ 1.0**
 - The only runtime dependency is [`mupdf`](https://www.npmjs.com/package/mupdf)
   (Artifex's official WASM bindings). No native build, no system libs.
+- Optional, only for [OCR of table cells](/guide/ocr) with the default
+  RapidOCR engine: `npm i ppu-paddle-ocr onnxruntime-node` (ONNX Runtime
+  is a native package of a few hundred MB).
 
 ## Install
 
@@ -62,7 +65,7 @@ contribute to the library itself.
 import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync } from "node:fs";
 
-const md = toMarkdown(readFileSync("any.pdf"));
+const md = await toMarkdown(readFileSync("any.pdf"));
 console.log(md.slice(0, 80));
 ```
 

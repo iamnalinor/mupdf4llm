@@ -8,6 +8,10 @@ import { IdentifyHeaders, type HeaderIdProvider } from "./text/identifyHeaders";
 import { columnBoxes } from "./layout/multiColumn";
 import { extractDrawings } from "./tables/drawingDevice";
 import { findTables } from "./tables/tableFinder";
+import { detectRulings } from "./tables/pixelGrid";
+import { PageRaster } from "./ocr/engine";
+import { createRapidOcr, lazyEngine } from "./ocr/rapidOcr";
+import { ocrTableCells } from "./ocr/cellText";
 import { removeRotation } from "./layout/pageRotation";
 import { ProgressBar } from "./progress";
 import { renderPageImage, dedupeImages } from "./images/imageExtract";
@@ -22,6 +26,7 @@ import type {
   LinkInfo,
   TableData,
 } from "./types";
+import type { OcrEngine } from "./ocr/engine";
 
 interface PageParams {
   page: mupdf.PDFPage;
@@ -324,10 +329,26 @@ function getToc(doc: mupdf.PDFDocument): [number, string, number][] {
 /** Internal-only flag: callers from index.ts pick which entry point they need. */
 type RunMode = { pageChunks?: boolean };
 
-export function toMarkdown(
+export async function toMarkdown(
   doc: mupdf.PDFDocument,
   opts: MarkdownOptions & RunMode = {},
-): string | PageChunk[] {
+): Promise<string | PageChunk[]> {
+  if (opts.ocr) return convert(doc, opts, opts.ocr);
+  // Without a caller-supplied engine, RapidOCR is loaded on the first cell
+  // that needs OCR and released at the end of this call.
+  const ocr = lazyEngine(createRapidOcr);
+  try {
+    return await convert(doc, opts, ocr);
+  } finally {
+    await ocr.dispose?.();
+  }
+}
+
+async function convert(
+  doc: mupdf.PDFDocument,
+  opts: MarkdownOptions & RunMode,
+  ocr: OcrEngine,
+): Promise<string | PageChunk[]> {
   const {
     pages: pageList,
     writeImages = false,
@@ -353,6 +374,9 @@ export function toMarkdown(
   // `tableStrategy: null`), so the cell text flows back into the normal
   // paragraph stream instead of being dropped.
   const detectTables = opts.tableStrategy !== null && isEl("table");
+  const strategy = opts.tableStrategy ?? "lines_strict";
+  const textSource = opts.textSource ?? (strategy === "pixels" ? "ocr" : "pdf");
+  const ocrDpi = opts.ocrDpi ?? 300;
 
   if (!writeImages && !embedImages && !forceText) {
     throw new Error("Images and text on images cannot both be suppressed.");
@@ -425,13 +449,19 @@ export function toMarkdown(
       const tab_rects = new Map<number, Rect>();
       const tab_rects0: Rect[] = [];
       const pageImages: { bbox: Rect; ref: string; width: number; height: number }[] = [];
+      const pixels = detectTables && strategy === "pixels";
+      let raster: PageRaster | null = null;
       if (detectTables || opts.writeImages || opts.embedImages) {
         try {
-          const { paths, edges, images } = extractDrawings(page, { vectors: detectTables });
+          const { paths, edges, images } = extractDrawings(page, {
+            vectors: detectTables && !pixels,
+          });
           if (detectTables) {
-            tabs = findTables(td.blocks, paths, clip, {
-              strategy: opts.tableStrategy ?? "lines_strict",
-              edges,
+            // "pixels": ruling lines come from the rendered page instead.
+            if (pixels) raster = PageRaster.render(page, ocrDpi);
+            tabs = findTables(td.blocks, pixels ? [] : paths, clip, {
+              strategy,
+              edges: raster ? detectRulings(raster) : edges,
               explicitGrid: opts.explicitTableGrids,
             });
             tabs.forEach((t, i) => {
@@ -463,6 +493,11 @@ export function toMarkdown(
           // tolerate per-page detection failures; surface only with DEBUG_MUPDF4LLM=1
           if (process.env.DEBUG_MUPDF4LLM) console.error("[mupdf4llm] drawings/tables:", e);
         }
+      }
+
+      if (tabs.length && textSource !== "pdf") {
+        raster ??= PageRaster.render(page, ocrDpi);
+        await ocrTableCells(tabs, textSource, raster, ocr);
       }
 
       const parms: PageParams = {
@@ -549,6 +584,7 @@ export function toMarkdown(
             bbox: t.bbox,
             rows: t.row_count,
             columns: t.col_count,
+            cells: t.cellTexts(),
           })),
           images: pageImages.map((p, i) => ({
             bbox: p.bbox,

@@ -371,6 +371,83 @@ function splitLineRows() {
   save("split-line-rows.pdf", [{ content: c }]);
 }
 
+/** A 4x5 ruled table: header + four data rows, text in Helvetica. */
+function plainGridContent(): string {
+  const cols = [60, 160, 300, 400, 520];
+  const top = 760;
+  const ROW = 24;
+  const rows = [
+    ["No", "Region", "Count", "Share"],
+    ["1", "North", "120", "40"],
+    ["2", "South", "90", "30"],
+    ["3", "East", "60", "20"],
+    ["4", "West", "30", "10"],
+  ];
+  let c = "0 G 1 w\n";
+  for (let r = 0; r <= rows.length; r++)
+    c += `${cols[0]} ${top - r * ROW} m ${cols.at(-1)} ${top - r * ROW} l S\n`;
+  for (const x of cols) c += `${x} ${top} m ${x} ${top - rows.length * ROW} l S\n`;
+  rows.forEach((row, r) =>
+    row.forEach((v, k) => (c += text(cols[k]! + 6, top - r * ROW - 16, v, 12))),
+  );
+  return c;
+}
+
+/**
+ * A scanned page: the table exists only as pixels of one full-page image,
+ * with no text layer and no vector graphics.
+ */
+function scannedGrid() {
+  const src = new mupdf.PDFDocument();
+  const font = src.addSimpleFont(new mupdf.Font("Helvetica"));
+  const res = src.addObject({ Font: { F1: font } });
+  src.insertPage(-1, src.addPage([0, 0, W, H], 0, res, plainGridContent()));
+  const DPI = 150;
+  const pix = src
+    .loadPage(0)
+    .toPixmap(mupdf.Matrix.scale(DPI / 72, DPI / 72), mupdf.ColorSpace.DeviceGray, false);
+
+  const doc = new mupdf.PDFDocument();
+  const img = doc.addImage(new mupdf.Image(pix));
+  const resources = doc.addObject({ XObject: { Im0: img } });
+  doc.insertPage(-1, doc.addPage([0, 0, W, H], 0, resources, `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q\n`));
+  writeFileSync(`${OUT}/scanned-grid.pdf`, doc.saveToBuffer("compress").asUint8Array());
+  console.log(`wrote ${OUT}/scanned-grid.pdf`);
+}
+
+/**
+ * Correct vector grid, broken text layer: the body rows use a font whose
+ * ToUnicode map sends every printable code to the Private Use Area, as in
+ * PDFs with a mangled font encoding. The header row is intact.
+ */
+function brokenTextGrid() {
+  const doc = new mupdf.PDFDocument();
+  const good = doc.addSimpleFont(new mupdf.Font("Helvetica"));
+  const cmap =
+    "/CIDInit /ProcSet findresource begin 12 dict begin begincmap " +
+    "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def " +
+    "/CMapName /Broken def /CMapType 2 def 1 begincodespacerange <00> <FF> endcodespacerange " +
+    "1 beginbfrange <21> <7E> <E021> endbfrange endcmap " +
+    "CMapName currentdict /CMap defineresource pop end end";
+  // A separate font dict: addSimpleFont would hand back the shared one.
+  const bad = doc.addObject({
+    Type: "Font",
+    Subtype: "Type1",
+    BaseFont: "Helvetica",
+    Encoding: "WinAnsiEncoding",
+    ToUnicode: doc.addStream(cmap, {}),
+  });
+  const resources = doc.addObject({ Font: { F1: good, F2: bad } });
+  // Header lines stay on F1; the body switches to F2.
+  const content = plainGridContent().replace(
+    /BT \/F1 (\d+) Tf ([\d.]+) ([\d.]+) Td/g,
+    (m, size, x, y) => (Number(y) < 740 ? `BT /F2 ${size} Tf ${x} ${y} Td` : m),
+  );
+  doc.insertPage(-1, doc.addPage([0, 0, W, H], 0, resources, content));
+  writeFileSync(`${OUT}/broken-text-grid.pdf`, doc.saveToBuffer("compress").asUint8Array());
+  console.log(`wrote ${OUT}/broken-text-grid.pdf`);
+}
+
 const all: Record<string, () => void> = {
   compoundStrokeGrid,
   compoundFillGrid,
@@ -380,6 +457,8 @@ const all: Record<string, () => void> = {
   rotatedCropBox,
   ruleVariants,
   splitLineRows,
+  scannedGrid,
+  brokenTextGrid,
 };
 const only = process.argv.slice(2);
 for (const [name, make] of Object.entries(all)) if (!only.length || only.includes(name)) make();

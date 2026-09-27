@@ -11,7 +11,7 @@ font size, picks the most common size as the body limit, then assigns
 ```ts
 import { toMarkdown, IdentifyHeaders } from "@nalinor/mupdf4llm";
 
-const md = toMarkdown(buf); // implicit IdentifyHeaders
+const md = await toMarkdown(buf); // implicit IdentifyHeaders
 ```
 
 Tune it manually:
@@ -27,7 +27,7 @@ const hdr = new IdentifyHeaders(doc, {
   pages: [0, 1, 2], // analyze only the first three pages
 });
 
-const md = toMarkdown(buf, { hdrInfo: hdr });
+const md = await toMarkdown(buf, { hdrInfo: hdr });
 ```
 
 ## `TocHeaders`
@@ -41,7 +41,7 @@ hierarchy but an authored outline).
 ```ts
 import { toMarkdown, TocHeaders } from "@nalinor/mupdf4llm";
 
-const md = toMarkdown(buf, { hdrInfo: new TocHeaders(doc) });
+const md = await toMarkdown(buf, { hdrInfo: new TocHeaders(doc) });
 ```
 
 ## Custom provider
@@ -54,7 +54,7 @@ const hdr = {
     return span.font.includes("Heading-1") ? "# " : "";
   },
 };
-toMarkdown(buf, { hdrInfo: hdr });
+await toMarkdown(buf, { hdrInfo: hdr });
 ```
 
 ## Disabling
@@ -63,5 +63,5 @@ Pass `false` to skip header inference entirely (everything becomes body
 text):
 
 ```ts
-toMarkdown(buf, { hdrInfo: false });
+await toMarkdown(buf, { hdrInfo: false });
 ```

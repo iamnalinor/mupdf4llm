@@ -22,10 +22,9 @@ port:
   `pymupdf-layout` ONNX wheel, distributed under a Polyform
   Noncommercial license. No JS distribution exists; we can't legally
   repackage the model.
-- **OCR** — the official `mupdf` npm WASM bundle ships **without**
-  Tesseract/Leptonica linked in. See
-  [`src/ocr/README.md`](https://github.com/iamnalinor/mupdf4llm/blob/main/src/ocr/README.md)
-  for a `tesseract.js` recipe.
+- **Whole-page OCR** — the official `mupdf` npm WASM bundle ships
+  **without** Tesseract/Leptonica linked in. Table cells can be OCR'd
+  with a pluggable engine — see [OCR for tables](/guide/ocr).
 
 For everything else — see [parity and limits](/guide/parity-and-limits).
 

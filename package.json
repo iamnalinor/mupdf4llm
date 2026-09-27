@@ -1,7 +1,7 @@
 {
   "name": "@nalinor/mupdf4llm",
-  "version": "0.2.1",
-  "description": "TypeScript port of pymupdf4llm — convert PDFs to LLM-ready Markdown using the mupdf WASM package.",
+  "version": "0.3.0",
+  "description": "TypeScript port of pymupdf4llm — convert PDFs to LLM-ready Markdown using the mupdf WASM package, with optional OCR of table cells.",
   "keywords": [
     "pdf",
     "markdown",
@@ -10,7 +10,9 @@
     "pymupdf4llm",
     "rag",
     "llm",
-    "text-extraction"
+    "text-extraction",
+    "ocr",
+    "rapidocr"
   ],
   "license": "AGPL-3.0-or-later",
   "author": "iamnalinor <https://github.com/iamnalinor>",
@@ -39,10 +41,18 @@
     }
   },
   "peerDependencies": {
-    "llamaindex": "*"
+    "llamaindex": "*",
+    "onnxruntime-node": ">=1.23.2",
+    "ppu-paddle-ocr": "^6.6.0"
   },
   "peerDependenciesMeta": {
     "llamaindex": {
+      "optional": true
+    },
+    "onnxruntime-node": {
+      "optional": true
+    },
+    "ppu-paddle-ocr": {
       "optional": true
     }
   },
@@ -59,7 +69,7 @@
     "lint:check": "prettier --check . && eslint . && tsc --noEmit",
     "build": "bun run build:clean && bun run build:js && bun run build:dts",
     "build:clean": "rm -rf dist",
-    "build:js": "bun build src/index.ts --target=node --format=esm --outfile=dist/index.js --external mupdf && bun build src/index.ts --target=node --format=cjs --outfile=dist/index.cjs --external mupdf && bun build src/llama/pdfMarkdownReader.ts --target=node --format=esm --outfile=dist/llama.js --external mupdf --external llamaindex && bun build src/llama/pdfMarkdownReader.ts --target=node --format=cjs --outfile=dist/llama.cjs --external mupdf --external llamaindex",
+    "build:js": "bun build src/index.ts --target=node --format=esm --outfile=dist/index.js --external mupdf --external ppu-paddle-ocr --external onnxruntime-node && bun build src/index.ts --target=node --format=cjs --outfile=dist/index.cjs --external mupdf --external ppu-paddle-ocr --external onnxruntime-node && bun build src/llama/pdfMarkdownReader.ts --target=node --format=esm --outfile=dist/llama.js --external mupdf --external ppu-paddle-ocr --external onnxruntime-node --external llamaindex && bun build src/llama/pdfMarkdownReader.ts --target=node --format=cjs --outfile=dist/llama.cjs --external mupdf --external ppu-paddle-ocr --external onnxruntime-node --external llamaindex",
     "build:dts": "tsc -p tsconfig.build.json",
     "docs:api": "typedoc",
     "docs:dev": "bun run docs:api && vitepress dev docs",

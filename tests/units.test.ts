@@ -26,7 +26,7 @@ function openFixture(name: string): mupdf.PDFDocument {
   ) as mupdf.PDFDocument;
 }
 
-test("isWhite + startswithBullet", () => {
+test("isWhite + startswithBullet", async () => {
   expect(isWhite("   ")).toBe(true);
   expect(isWhite(" a ")).toBe(false);
   expect(startswithBullet("- foo")).toBe(true);
@@ -34,7 +34,7 @@ test("isWhite + startswithBullet", () => {
   expect(startswithBullet("Foo")).toBe(false);
 });
 
-test("clusterStripes groups overlapping bands", () => {
+test("clusterStripes groups overlapping bands", async () => {
   const a = new Rect(0, 0, 50, 10);
   const b = new Rect(60, 2, 100, 12);
   const c = new Rect(0, 50, 50, 60);
@@ -44,7 +44,7 @@ test("clusterStripes groups overlapping bands", () => {
   expect(stripes[1]!.length).toBe(1);
 });
 
-test("computeReadingOrder sorts top→bottom, left→right within stripe", () => {
+test("computeReadingOrder sorts top→bottom, left→right within stripe", async () => {
   const a = new Rect(50, 0, 100, 10);
   const b = new Rect(0, 2, 40, 12);
   const c = new Rect(0, 50, 50, 60);
@@ -54,7 +54,7 @@ test("computeReadingOrder sorts top→bottom, left→right within stripe", () =>
   expect(order[2]).toBe(c);
 });
 
-test("ProgressBar yields all items in order", () => {
+test("ProgressBar yields all items in order", async () => {
   const sink: string[] = [];
   const bar = new ProgressBar([1, 2, 3], {
     width: 10,
@@ -68,7 +68,7 @@ test("ProgressBar yields all items in order", () => {
   expect(sink.some((s) => s.includes("3/3"))).toBe(true);
 });
 
-test("IdentifyHeaders maps the largest font to '#'", () => {
+test("IdentifyHeaders maps the largest font to '#'", async () => {
   const doc = openFixture("pdflatex-outline.pdf");
   try {
     const ih = new IdentifyHeaders(doc);
@@ -80,7 +80,7 @@ test("IdentifyHeaders maps the largest font to '#'", () => {
   }
 });
 
-test("TocHeaders constructs without error on an outlined doc", () => {
+test("TocHeaders constructs without error on an outlined doc", async () => {
   const doc = openFixture("pdflatex-outline.pdf");
   try {
     const th = new TocHeaders(doc);
@@ -92,7 +92,7 @@ test("TocHeaders constructs without error on an outlined doc", () => {
   }
 });
 
-test("extractWords resets word index per line", () => {
+test("extractWords resets word index per line", async () => {
   const doc = openFixture("pdflatex-4-pages.pdf");
   try {
     const page = doc.loadPage(0);
@@ -117,7 +117,7 @@ test("extractWords resets word index per line", () => {
   }
 });
 
-test("getKeyValues extracts a non-empty list with valid shapes", () => {
+test("getKeyValues extracts a non-empty list with valid shapes", async () => {
   const doc = openFixture("pdflatex-forms.pdf");
   try {
     const fields = getKeyValues(doc);
@@ -134,12 +134,12 @@ test("getKeyValues extracts a non-empty list with valid shapes", () => {
   }
 });
 
-test("MarkdownOptions.fontsizeLimit drops small spans", () => {
+test("MarkdownOptions.fontsizeLimit drops small spans", async () => {
   // pdflatex-4-pages renders body text around 11pt and headers ~12pt.
   // Setting fontsizeLimit above body kills body but keeps headers.
   const buf = readFileSync("tests/fixtures/pdflatex-4-pages.pdf");
-  const full = toMarkdownPages(buf);
-  const trimmed = toMarkdownPages(buf, { fontsizeLimit: 100 });
+  const full = await toMarkdownPages(buf);
+  const trimmed = await toMarkdownPages(buf, { fontsizeLimit: 100 });
   // Filter so aggressive that nothing should survive
   const fullLen = full.map((c) => c.text.length).reduce((a, b) => a + b, 0);
   const trimmedLen = trimmed.map((c) => c.text.length).reduce((a, b) => a + b, 0);
@@ -147,10 +147,10 @@ test("MarkdownOptions.fontsizeLimit drops small spans", () => {
   expect(trimmedLen).toBeLessThan(fullLen);
 });
 
-test("PageChunk shape: tables/images carry real bboxes, words are typed", () => {
+test("PageChunk shape: tables/images carry real bboxes, words are typed", async () => {
   // Use the vendored real-world fixture which has tables.
   const buf = readFileSync("tests/fixtures/pdflatex-4-pages.pdf");
-  const chunks = toMarkdownPages(buf, { extractWords: true });
+  const chunks = await toMarkdownPages(buf, { extractWords: true });
   expect(chunks.length).toBeGreaterThan(0);
   for (const c of chunks) {
     expect(Array.isArray(c.words)).toBe(true);
@@ -189,44 +189,44 @@ const ALL_ELEMENTS: MarkdownElement[] = [
 const without = (e: MarkdownElement): MarkdownElement[] => ALL_ELEMENTS.filter((x) => x !== e);
 const wordCount = (s: string) => (s.match(/\S+/g) ?? []).length;
 
-test("elements: omitting it is identical to the full whitelist", () => {
+test("elements: omitting it is identical to the full whitelist", async () => {
   const buf = new Uint8Array(readFileSync("tests/fixtures/pdflatex-outline.pdf"));
-  expect(toMarkdown(buf, { elements: ALL_ELEMENTS })).toBe(toMarkdown(buf));
+  expect(await toMarkdown(buf, { elements: ALL_ELEMENTS })).toBe(await toMarkdown(buf));
 });
 
-test("elements: [] strips all markup but keeps text", () => {
+test("elements: [] strips all markup but keeps text", async () => {
   const buf = new Uint8Array(readFileSync("tests/fixtures/pdflatex-outline.pdf"));
-  const md = toMarkdown(buf, { elements: [] }) as string;
+  const md = (await toMarkdown(buf, { elements: [] })) as string;
   expect(md).not.toContain("**");
   expect(md).not.toMatch(/^#/m);
   expect(md).not.toContain("<br>");
   expect(wordCount(md)).toBeGreaterThan(0);
 });
 
-test("elements: dropping 'bold' removes ** but keeps headers", () => {
+test("elements: dropping 'bold' removes ** but keeps headers", async () => {
   const buf = new Uint8Array(readFileSync("tests/fixtures/pdflatex-outline.pdf"));
-  const full = toMarkdown(buf) as string;
+  const full = (await toMarkdown(buf)) as string;
   expect(full).toContain("**"); // sanity: fixture has bold + headers
   expect(full).toMatch(/^#/m);
-  const md = toMarkdown(buf, { elements: without("bold") }) as string;
+  const md = (await toMarkdown(buf, { elements: without("bold") })) as string;
   expect(md).not.toContain("**");
   expect(md).toMatch(/^#/m);
 });
 
-test("elements: dropping 'lineBreak' removes <br> while keeping tables", () => {
+test("elements: dropping 'lineBreak' removes <br> while keeping tables", async () => {
   const buf = new Uint8Array(readFileSync("tests/fixtures/nics-background-checks-2015-11.pdf"));
-  const full = toMarkdown(buf) as string;
+  const full = (await toMarkdown(buf)) as string;
   expect(full).toContain("<br>"); // sanity: fixture has wrapped cells
-  const md = toMarkdown(buf, { elements: without("lineBreak") }) as string;
+  const md = (await toMarkdown(buf, { elements: without("lineBreak") })) as string;
   expect(md).not.toContain("<br>");
   expect(md).toMatch(/^\|/m); // tables still rendered
 });
 
-test("elements: dropping 'table' emits cell text as plain paragraphs, not lost", () => {
+test("elements: dropping 'table' emits cell text as plain paragraphs, not lost", async () => {
   const buf = new Uint8Array(readFileSync("tests/fixtures/nics-background-checks-2015-11.pdf"));
-  const full = toMarkdown(buf) as string;
+  const full = (await toMarkdown(buf)) as string;
   expect(full).toMatch(/^\|/m); // sanity: fixture is table-heavy
-  const md = toMarkdown(buf, { elements: without("table") }) as string;
+  const md = (await toMarkdown(buf, { elements: without("table") })) as string;
   expect(md).not.toMatch(/^\|/m); // no markdown table rows
   // Table content must survive as plain text rather than disappearing.
   expect(wordCount(md)).toBeGreaterThanOrEqual(wordCount(full));
@@ -236,9 +236,11 @@ test("elements: dropping 'table' emits cell text as plain paragraphs, not lost",
 // Vector table grids (fixtures generated by scripts/make-table-fixtures.ts)
 // ---------------------------------------------------------------------------
 
-function tablePages(name: string): string[] {
+async function tablePages(name: string): Promise<string[]> {
   const buf = new Uint8Array(readFileSync(`tests/fixtures/${name}`));
-  return toMarkdownPages(buf, { tableStrategy: "lines", elements: ["table"] }).map((c) => c.text);
+  return (await toMarkdownPages(buf, { tableStrategy: "lines", elements: ["table"] })).map(
+    (c) => c.text,
+  );
 }
 
 /** Markdown table rows (separator rows excluded) as arrays of cells. */
@@ -249,8 +251,8 @@ function tableRows(md: string): string[][] {
     .map((l) => l.slice(1, -1).split(/(?<!\\)\|/));
 }
 
-test("tables: grid stroked as one compound path, continued over two pages", () => {
-  const pages = tablePages("compound-stroke-grid.pdf");
+test("tables: grid stroked as one compound path, continued over two pages", async () => {
+  const pages = await tablePages("compound-stroke-grid.pdf");
   expect(pages.length).toBe(2);
   const rows = pages.map(tableRows);
   expect(rows[0]![0]).toEqual(["No", "Name", "Region", "Score"]);
@@ -266,8 +268,8 @@ test("tables: grid stroked as one compound path, continued over two pages", () =
   expect(pages[1]).toMatch(/^Seal$/m);
 });
 
-test("tables: grid filled as one path of many thin rectangles", () => {
-  const [page] = tablePages("compound-fill-grid.pdf");
+test("tables: grid filled as one path of many thin rectangles", async () => {
+  const [page] = await tablePages("compound-fill-grid.pdf");
   const rows = tableRows(page!);
   expect(rows.length).toBe(12);
   expect(rows[0]).toEqual(["No", "Name", "City", "Grade", "Score"]);
@@ -276,8 +278,8 @@ test("tables: grid filled as one path of many thin rectangles", () => {
   expect(rows).toContainEqual(["5", "Student 5", "North-West", "9", "55"]);
 });
 
-test("tables: merged header cells are not split by inner grid coordinates", () => {
-  const [page] = tablePages("merged-cells-grid.pdf");
+test("tables: merged header cells are not split by inner grid coordinates", async () => {
+  const [page] = await tablePages("merged-cells-grid.pdf");
   const rows = tableRows(page!);
   expect(rows[0]).toEqual(["No", "Name", "Results per task", "", "", "Total"]);
   expect(rows[1]).toEqual(["", "", "T1", "T2", "T3", ""]);
@@ -285,8 +287,8 @@ test("tables: merged header cells are not split by inner grid coordinates", () =
   expect(rows.length).toBe(8);
 });
 
-test("tables: glyphs taller than their row are assigned by center", () => {
-  const [page] = tablePages("tall-glyph-cells.pdf");
+test("tables: glyphs taller than their row are assigned by center", async () => {
+  const [page] = await tablePages("tall-glyph-cells.pdf");
   const rows = tableRows(page!);
   expect(rows[0]).toEqual(["No", "Name", "Score"]);
   expect(rows.slice(1)).toEqual(
@@ -294,8 +296,8 @@ test("tables: glyphs taller than their row are assigned by center", () => {
   );
 });
 
-test("tables: white cell/line backgrounds do not create phantom rows", () => {
-  const [page] = tablePages("white-cell-backgrounds.pdf");
+test("tables: white cell/line backgrounds do not create phantom rows", async () => {
+  const [page] = await tablePages("white-cell-backgrounds.pdf");
   const rows = tableRows(page!);
   expect(rows).toEqual([
     ["No", "Name", "Score"],
@@ -307,8 +309,8 @@ test("tables: white cell/line backgrounds do not create phantom rows", () => {
   ]);
 });
 
-test("tables: rotated page with a CropBox keeps its full width", () => {
-  const [page] = tablePages("rotated-cropbox-table.pdf");
+test("tables: rotated page with a CropBox keeps its full width", async () => {
+  const [page] = await tablePages("rotated-cropbox-table.pdf");
   expect(tableRows(page!)).toEqual([
     ["Key", "Alpha", "Beta", "Gamma", "Delta"],
     ["k1", "a1", "b1", "g1", "d1"],
@@ -316,16 +318,16 @@ test("tables: rotated page with a CropBox keeps its full width", () => {
   ]);
 });
 
-test("tables: multi-line body cells never break the markdown row without <br>", () => {
+test("tables: multi-line body cells never break the markdown row without <br>", async () => {
   const buf = new Uint8Array(readFileSync("tests/fixtures/nics-background-checks-2015-11.pdf"));
-  const md = toMarkdown(buf, { elements: ["table"] }) as string;
+  const md = (await toMarkdown(buf, { elements: ["table"] })) as string;
   const lines = md.split("\n").filter((l) => l.startsWith("|"));
   expect(lines.length).toBeGreaterThan(10);
   expect(lines.every((l) => l.endsWith("|"))).toBe(true);
 });
 
-test("tables: white rules on shading, header-only column rules, rounded border", () => {
-  const pages = tablePages("rule-variants.pdf");
+test("tables: white rules on shading, header-only column rules, rounded border", async () => {
+  const pages = await tablePages("rule-variants.pdf");
   const body = [
     ["1", "Item 1", "10"],
     ["2", "Item 2", "20"],
@@ -340,14 +342,14 @@ test("tables: white rules on shading, header-only column rules, rounded border",
 // Text strategy
 // ---------------------------------------------------------------------------
 
-function textTableRows(name: string): string[][] {
+async function textTableRows(name: string): Promise<string[][]> {
   const buf = new Uint8Array(readFileSync(`tests/fixtures/${name}`));
-  const pages = toMarkdownPages(buf, { tableStrategy: "text", elements: ["table"] });
+  const pages = await toMarkdownPages(buf, { tableStrategy: "text", elements: ["table"] });
   return pages.flatMap((p) => tableRows(p.text));
 }
 
-test("tables: text strategy, each cell of a row is its own text line", () => {
-  expect(textTableRows("split-line-rows.pdf")).toEqual([
+test("tables: text strategy, each cell of a row is its own text line", async () => {
+  expect(await textTableRows("split-line-rows.pdf")).toEqual([
     [
       "Name",
       "Grade",
@@ -365,9 +367,9 @@ test("tables: text strategy, each cell of a row is its own text line", () => {
   ]);
 });
 
-test("tables: text strategy, centred cells under a one-line header, no false tables in prose", () => {
+test("tables: text strategy, centred cells under a one-line header, no false tables in prose", async () => {
   // Pages 1-2 are two-column prose, page 3 holds a ruleless table.
-  expect(textTableRows("multicolumn.pdf")).toEqual([
+  expect(await textTableRows("multicolumn.pdf")).toEqual([
     ["Country", "Population (millions)", "Area (km2)", "Capital", "Official Language"],
     ["Austria", "8.9", "83,879", "Vienna", "German"],
     ["Belgium", "11.5", "30,689", "Brussels", "Dutch, French, German"],
@@ -400,7 +402,7 @@ function textLine(text: string, x: number, y: number): Line {
   return { bbox: [x, y, x + text.length * 5, y + 8], dir: [1, 0], wmode: 0, spans: [span] };
 }
 
-test("tables: text strategy, every cell in its own block", () => {
+test("tables: text strategy, every cell in its own block", async () => {
   const cols = [0, 100, 150, 220];
   const rows = [
     ["Name", "Grade", "Team", "Score"],
@@ -434,7 +436,7 @@ const textTables = (blocks: Block[]) =>
     tableRows(t.to_markdown()),
   );
 
-test("tables: text strategy, right-aligned numbers under a one-line header", () => {
+test("tables: text strategy, right-aligned numbers under a one-line header", async () => {
   const rows = [
     ["Name", "Grade", "Team", "Points"],
     ["Alice", "10", "North", "191"],
@@ -453,7 +455,7 @@ test("tables: text strategy, right-aligned numbers under a one-line header", () 
   expect(textTables(cellBlocks(rows, x))).toEqual([rows]);
 });
 
-test("tables: text strategy keeps stacked tables apart", () => {
+test("tables: text strategy keeps stacked tables apart", async () => {
   const a = [
     ["Key", "Value", "Unit"],
     ["alpha", "1", "m"],
@@ -472,7 +474,7 @@ test("tables: text strategy keeps stacked tables apart", () => {
   expect(textTables(blocks)).toEqual([a, b]);
 });
 
-test("tables: text strategy ignores three columns of prose", () => {
+test("tables: text strategy ignores three columns of prose", async () => {
   // Gutters wider than twice the line height, lines ragged by up to 15pt.
   const blocks: Block[] = [];
   for (let c = 0; c < 3; c++) {
@@ -488,7 +490,7 @@ test("tables: text strategy ignores three columns of prose", () => {
   expect(textTables(blocks)).toEqual([]);
 });
 
-test("tables: text strategy ignores an overprinted (fake bold) header copy", () => {
+test("tables: text strategy ignores an overprinted (fake bold) header copy", async () => {
   const rows = [
     ["Name", "Grade", "Team", "Score"],
     ["Alice", "10", "North", "91"],
@@ -504,18 +506,18 @@ test("tables: text strategy ignores an overprinted (fake bold) header copy", () 
   expect(table!.row_count).toBe(4);
 });
 
-test("tables: text strategy keeps a header that reaches into the first row", () => {
+test("tables: text strategy keeps a header that reaches into the first row", async () => {
   // "No", "Name" and "Total" are taller than the T1..T3 row they touch; the
   // group label above T1..T3 spans columns and stays outside the table.
   const buf = new Uint8Array(readFileSync("tests/fixtures/merged-cells-grid.pdf"));
-  const [page] = toMarkdownPages(buf, { tableStrategy: "text" });
+  const [page] = await toMarkdownPages(buf, { tableStrategy: "text" });
   const rows = tableRows(page!.text);
   expect(rows[0]).toEqual(["No", "Name", "T1", "T2", "T3", "Total"]);
   expect(page!.text).toContain("Results per task");
   expect(rows[1]).toEqual(["1", "Member 1", "1", "4", "6", "11"]);
 });
 
-test("tables: markdown escaping of | and trailing backslashes in cells", () => {
+test("tables: markdown escaping of | and trailing backslashes in cells", async () => {
   const rows = [
     ["Path", "Rule", "Note"],
     ["C:\\dir\\", "a|b", "x\\|y"],
@@ -532,7 +534,7 @@ test("tables: markdown escaping of | and trailing backslashes in cells", () => {
   expect(md).toContain("|C:\\dir\\\\|a\\|b|x\\\\\\|y|");
 });
 
-test("tables: text strategy keeps a column that only a totals row crosses", () => {
+test("tables: text strategy keeps a column that only a totals row crosses", async () => {
   const cols = [0, 100, 150, 220];
   const lines = [
     ["Item", "Qty", "Price", "Sum"],
@@ -553,7 +555,7 @@ test("tables: text strategy keeps a column that only a totals row crosses", () =
   ]);
 });
 
-test("tables: text strategy leaves a paragraph touching a table outside it", () => {
+test("tables: text strategy leaves a paragraph touching a table outside it", async () => {
   const rows = [
     ["Alice", "10", "North", "91"],
     ["Bob", "11", "South", "82"],
@@ -574,7 +576,7 @@ test("tables: text strategy leaves a paragraph touching a table outside it", () 
   expect(tables[0]!.bbox[1]).toBeGreaterThanOrEqual(1);
 });
 
-test("tables: text strategy, one wider right-aligned value in a headerless table", () => {
+test("tables: text strategy, one wider right-aligned value in a headerless table", async () => {
   const rows = [
     ["Alice", "North", "82"],
     ["Bob", "South", "45"],

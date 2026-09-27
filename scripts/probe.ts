@@ -7,5 +7,5 @@ if (!file) {
   process.exit(1);
 }
 const buf = readFileSync(file);
-const md = toMarkdown(buf);
+const md = await toMarkdown(buf);
 process.stdout.write(md);

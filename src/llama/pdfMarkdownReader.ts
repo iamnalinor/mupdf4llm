@@ -3,6 +3,7 @@ import * as mupdf from "mupdf";
 import { toMarkdown as ragToMarkdown } from "../helpers/pymupdfRag";
 import { IdentifyHeaders } from "../helpers/text/identifyHeaders";
 import type { MarkdownOptions } from "../helpers/types";
+import { createRapidOcr, lazyEngine } from "../helpers/ocr/rapidOcr";
 
 type MetaFilter = (m: Record<string, unknown>) => Record<string, unknown>;
 
@@ -45,6 +46,8 @@ export class PDFMarkdownReader {
       new Uint8Array(bytes),
       "application/pdf",
     ) as mupdf.PDFDocument;
+    // Pages are converted one call at a time; share one OCR engine across them.
+    const ownEngine = loadOptions.ocr ? null : lazyEngine(createRapidOcr);
     try {
       const hdrInfo = new IdentifyHeaders(doc);
       const pageCount = doc.countPages();
@@ -53,16 +56,18 @@ export class PDFMarkdownReader {
       for (let pno = 0; pno < pageCount; pno++) {
         let meta = this.docMeta(doc, filePath, pno, extraInfo);
         if (this.metaFilter) meta = this.metaFilter(meta);
-        const text = ragToMarkdown(doc, {
+        const text = (await ragToMarkdown(doc, {
           ...loadOptions,
           pages: [pno],
           hdrInfo: hdrInfo,
+          ocr: loadOptions.ocr ?? ownEngine!,
           pageChunks: false,
-        }) as string;
+        })) as string;
         out.push(Doc ? new Doc({ text, metadata: meta }) : { text, metadata: meta });
       }
       return out;
     } finally {
+      await ownEngine?.dispose?.();
       doc.destroy();
     }
   }

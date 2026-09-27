@@ -90,7 +90,7 @@ doc.save('${SYNTH_DIR}/table.pdf')
 
 # Wrapped-cell table — exercises the >50% char-overlap dedup in
 # extractCellText. Each org-name cell holds two visual lines that nearly
-# touch the row boundary; the school-column cell on row 2 holds three.
+# touch the row boundary; the name cell on row 2 holds three.
 # Without the fix, the trailing visual line is duplicated and/or leaks into
 # the neighbour cell.
 doc = pymupdf.open()
@@ -107,19 +107,19 @@ page.insert_text((xs[1] + 4, ys[0] + 14), 'Organisation', fontsize=10, fontname=
 page.insert_text((xs[2] + 4, ys[0] + 14), 'Score', fontsize=10, fontname='Helvetica-Bold')
 # Row 1 — wrapped on 2 lines.
 page.insert_text((xs[0] + 4, ys[1] + 14), '1', fontsize=10)
-page.insert_text((xs[1] + 4, ys[1] + 14), 'State Budgetary Educational Institution', fontsize=10)
-page.insert_text((xs[1] + 4, ys[1] + 30), 'No. 548 "Tsaritsyno"', fontsize=10)
+page.insert_text((xs[1] + 4, ys[1] + 14), 'Regional Water Supply Service Department', fontsize=10)
+page.insert_text((xs[1] + 4, ys[1] + 30), 'Unit No. 7 "Northgate"', fontsize=10)
 page.insert_text((xs[2] + 4, ys[1] + 14), '86.8', fontsize=10)
 # Row 2 — wrapped on 3 lines.
 page.insert_text((xs[0] + 4, ys[2] + 14), '2', fontsize=10)
-page.insert_text((xs[1] + 4, ys[2] + 14), 'Autonomous Non-Profit General', fontsize=10)
-page.insert_text((xs[1] + 4, ys[2] + 30), 'Educational Organisation', fontsize=10)
-page.insert_text((xs[1] + 4, ys[2] + 46), 'School "LETOVO"', fontsize=10)
+page.insert_text((xs[1] + 4, ys[2] + 14), 'Independent Non-Profit Housing', fontsize=10)
+page.insert_text((xs[1] + 4, ys[2] + 30), 'Maintenance Association', fontsize=10)
+page.insert_text((xs[1] + 4, ys[2] + 46), 'Branch "ALDER"', fontsize=10)
 page.insert_text((xs[2] + 4, ys[2] + 14), '71.8', fontsize=10)
 # Row 3 — wrapped on 2 lines, different org.
 page.insert_text((xs[0] + 4, ys[3] + 14), '3', fontsize=10)
-page.insert_text((xs[1] + 4, ys[3] + 14), 'Lyceum of Innovative Technologies', fontsize=10)
-page.insert_text((xs[1] + 4, ys[3] + 30), '(Khabarovsk)', fontsize=10)
+page.insert_text((xs[1] + 4, ys[3] + 14), 'Bureau of Applied Measurements', fontsize=10)
+page.insert_text((xs[1] + 4, ys[3] + 30), '(Eastfield)', fontsize=10)
 page.insert_text((xs[2] + 4, ys[3] + 14), '64.3', fontsize=10)
 doc.save('${SYNTH_DIR}/tableWrapped.pdf')
 EOF`);
@@ -127,11 +127,11 @@ EOF`);
 
 describe("synthetic fixtures (byte parity vs pymupdf4llm)", () => {
   for (const name of ["simple", "medium", "multi", "table", "tableWrapped"]) {
-    testIf(`${name}.pdf`, () => {
+    testIf(`${name}.pdf`, async () => {
       ensureSyntheticFixtures();
       const file = `${SYNTH_DIR}/${name}.pdf`;
       const buf = readFileSync(file);
-      const ts = toMarkdown(buf);
+      const ts = await toMarkdown(buf);
       const py = pyMarkdown(file);
       if (ts !== py) {
         writeFileSync(`/tmp/${name}-ts.md`, ts);
@@ -204,12 +204,12 @@ describe("vendored fixtures", () => {
     const runner = f.mode === "smoke" ? test : testIf;
     runner(
       `${f.name} (${f.mode})`,
-      () => {
+      async () => {
         if (!existsSync(path)) {
           throw new Error(`missing fixture ${path}`);
         }
         const buf = readFileSync(path);
-        const ts = toMarkdown(buf);
+        const ts = await toMarkdown(buf);
         expect(ts.length).toBeGreaterThan(0);
 
         if (f.mode === "smoke") return;

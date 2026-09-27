@@ -31,10 +31,13 @@ entry point.
 
 ## Tables
 
-| Key                  | Type                                                        | Default          | Notes                                                   |
-| -------------------- | ----------------------------------------------------------- | ---------------- | ------------------------------------------------------- |
-| `tableStrategy`      | `"lines_strict" \| "lines" \| "text" \| "explicit" \| null` | `"lines_strict"` | See [Tables](/guide/tables). `null` disables detection. |
-| `explicitTableGrids` | `{ hLines: number[]; vLines: number[] }[]`                  | `[]`             | For `"explicit"` only.                                  |
+| Key                  | Type                                                                    | Default          | Notes                                                            |
+| -------------------- | ----------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------- |
+| `tableStrategy`      | `"lines_strict" \| "lines" \| "text" \| "explicit" \| "pixels" \| null` | `"lines_strict"` | See [Tables](/guide/tables). `null` disables detection.          |
+| `explicitTableGrids` | `{ hLines: number[]; vLines: number[] }[]`                              | `[]`             | For `"explicit"` only.                                           |
+| `textSource`         | `"pdf" \| "ocr" \| "auto"`                                              | see notes        | `"ocr"` for `"pixels"`, else `"pdf"`. See [OCR](/guide/ocr).     |
+| `ocr`                | `OcrEngine`                                                             | RapidOCR         | Needs `ppu-paddle-ocr` + `onnxruntime-node` unless you pass one. |
+| `ocrDpi`             | `number`                                                                | `300`            | Render resolution for `"pixels"` and OCR.                        |
 
 ## Images
 

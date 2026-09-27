@@ -1,9 +1,17 @@
 import { Rect, type BBox } from "../geometry";
-import type { Block, TableData, DrawingEdge, DrawingPath, Span, CellStyle } from "../types";
+import type {
+  Block,
+  TableData,
+  DrawingEdge,
+  DrawingPath,
+  Span,
+  CellStyle,
+  CellText,
+} from "../types";
 import { areDisjoint } from "../utils";
 import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD } from "../constants";
 
-export type TableStrategy = "lines_strict" | "lines" | "text" | "explicit";
+export type TableStrategy = "lines_strict" | "lines" | "text" | "explicit" | "pixels";
 
 const TOL = 3; // snapping tolerance for line coordinates
 
@@ -422,6 +430,8 @@ class Table implements TableData {
   row_count: number;
   col_count: number;
   private blocks: Block[];
+  /** Cell texts that replace the text layer (OCR results), keyed by `row,col`. */
+  private override = new Map<string, CellText>();
 
   constructor(blocks: Block[], cluster: ClusterCandidate) {
     const cols = uniqueSorted(cluster.vLines.map((v) => v.x));
@@ -455,11 +465,17 @@ class Table implements TableData {
       const markdown = r !== 0;
       for (let c = 0; c < this.col_count; c++) {
         const cell = this.cells[r]![c];
-        const txt = cell ? extractCellText(this.blocks, Rect.from(cell), markdown, style) : "";
+        const ocr = this.override.get(`${r},${c}`);
+        const txt = ocr
+          ? ocr.text
+          : cell
+            ? extractCellText(this.blocks, Rect.from(cell), markdown, style)
+            : "";
         // A raw newline would terminate the markdown table row, so body cells
         // get the same treatment as the header when `<br>` is disabled.
+        // OCR text is plain, with lines separated by "\n".
         const headerTxt = style.lineBreak ? txt.replace(/\n/g, "<br>") : joinCellLines(txt);
-        row.push(escapeMarkdownCell(markdown && style.lineBreak ? txt : headerTxt));
+        row.push(escapeMarkdownCell(markdown && style.lineBreak && !ocr ? txt : headerTxt));
       }
       grid.push(row);
     }
@@ -470,6 +486,24 @@ class Table implements TableData {
       out += "|" + grid[r]!.join("|") + "|\n";
     }
     return out + "\n";
+  }
+
+  cellTexts(): (CellText | null)[][] {
+    return this.cells.map((row, r) =>
+      row.map((cell, c) => {
+        if (!cell) return null;
+        return (
+          this.override.get(`${r},${c}`) ?? {
+            text: extractCellText(this.blocks, Rect.from(cell), false),
+            source: "pdf",
+          }
+        );
+      }),
+    );
+  }
+
+  setCellText(row: number, col: number, text: CellText): void {
+    this.override.set(`${row},${col}`, text);
   }
 }
 
@@ -494,13 +528,16 @@ export function findTables(
   if (strategy === "text") {
     return findTablesByText(blocks, clip);
   }
+  // "pixels": `edges` were detected on the rendered page; from here on they
+  // are handled like drawn rules under the tolerant "lines" rules.
+  const lenient = strategy === "lines" || strategy === "pixels";
 
   // "lines" / "lines_strict" — same algorithm, "lines" is more tolerant of
   // partial/short edges.
   const drawnEdges = opts.edges ?? [];
   if (!paths.length && !drawnEdges.length) return [];
   const allEdges: { kind: "h" | "v"; x0: number; y0: number; x1: number; y1: number }[] = [];
-  const edgeMin = strategy === "lines" ? 2 : 3;
+  const edgeMin = lenient ? 2 : 3;
   for (const p of paths) {
     if (!clip.contains(p.rect) && !p.rect.intersects(clip)) continue;
     allEdges.push(...pathToEdges(p, edgeMin));
@@ -520,7 +557,7 @@ export function findTables(
   const vLines = mergeV(allEdges);
   const clusters = clusterLines(hLines, vLines);
   const out: TableData[] = [];
-  const minRows = strategy === "lines" ? 1 : 2;
+  const minRows = lenient ? 1 : 2;
   for (const cl of clusters) {
     const t = new Table(blocks, cl);
     if (t.row_count >= minRows && t.col_count >= 2) out.push(t);

@@ -39,7 +39,7 @@ If you want both the text and the form values in one shot:
 ```ts
 import { toMarkdown, getKeyValues } from "@nalinor/mupdf4llm";
 
-const md = toMarkdown(buf);
+const md = await toMarkdown(buf);
 const fields = getKeyValues(doc);
 
 const fullMd =

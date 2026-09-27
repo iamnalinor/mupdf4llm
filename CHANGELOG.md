@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-27
+
+### Changed (breaking)
+
+- `toMarkdown` and `toMarkdownPages` are async and return a `Promise`:
+  write `await toMarkdown(buf)`. Output for the same options is unchanged.
+  `PDFMarkdownReader.loadData` was already async.
+
+### Added
+
+- `tableStrategy: "pixels"` finds ruled tables on the rendered page
+  (`ocrDpi`, default 300), so tables in scans without a text layer or
+  vector graphics are detected. It implies `textSource: "ocr"`.
+- `textSource: "pdf" | "ocr" | "auto"` chooses where table cell text comes
+  from, independently of how the table was found. `"ocr"` recognises every
+  cell (for a broken text layer under a good vector grid); `"auto"` OCRs
+  only cells whose text is empty or contains replacement / private-use /
+  control characters or mostly symbols. Default `"pdf"`, so existing
+  calls never run OCR.
+- Pluggable OCR: `ocr?: OcrEngine` accepts any object with
+  `recognize(image) => Promise<string>`. The default engine is RapidOCR
+  (PP-OCRv5 `eslav` model, ru/uk/be/en, via the optional peer
+  dependencies `ppu-paddle-ocr` + `onnxruntime-node`), loaded only when a
+  cell needs OCR. `createRapidOcr({ model })` creates a reusable engine;
+  a missing package or model rejects with `OcrSetupError`.
+  OCR runs per table cell, not per page.
+- `PageChunk.tables[].cells` holds each cell's plain text and its source
+  (`"pdf"`, `"ocr"` or `"failed"`). An OCR error or empty result for a
+  cell with ink marks the cell `"failed"` and leaves it empty; the
+  conversion continues.
+- Guide page "OCR for tables", fixtures `scanned-grid.pdf` and
+  `broken-text-grid.pdf`.
+
 ### Fixed
 
 - `text` table strategy: tables whose rows are stored as one text line (or
@@ -269,7 +302,8 @@ docs/                           VitePress + TypeDoc documentation site
 requirements.txt`. Tests `skipIf` Python or `pymupdf4llm` is
   missing so JS-only contributors can run `bun test` cleanly.
 
-[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/iamnalinor/mupdf4llm/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/iamnalinor/mupdf4llm/releases/tag/v0.1.2

@@ -59,7 +59,7 @@ pnpm add @nalinor/mupdf4llm
 import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync } from "node:fs";
 
-const md = toMarkdown(readFileSync("paper.pdf"));
+const md = await toMarkdown(readFileSync("paper.pdf"));
 console.log(md);
 ```
 
@@ -68,7 +68,7 @@ Need per-page chunks for RAG? Switch to `toMarkdownPages`:
 ```ts
 import { toMarkdownPages } from "@nalinor/mupdf4llm";
 
-const chunks = toMarkdownPages(readFileSync("paper.pdf"), {
+const chunks = await toMarkdownPages(readFileSync("paper.pdf"), {
   extractWords: true,
 });
 for (const c of chunks) console.log(c.metadata.page, c.text.length);

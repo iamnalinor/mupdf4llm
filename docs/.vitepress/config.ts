@@ -33,6 +33,7 @@ export default defineConfig({
             { text: "Options", link: "/guide/options" },
             { text: "Headers", link: "/guide/headers" },
             { text: "Tables", link: "/guide/tables" },
+            { text: "OCR for tables", link: "/guide/ocr" },
             { text: "Images", link: "/guide/images" },
             { text: "Words & chunks", link: "/guide/words-and-chunks" },
             { text: "Form fields", link: "/guide/form-fields" },

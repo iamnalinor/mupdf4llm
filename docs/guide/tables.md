@@ -1,7 +1,8 @@
 # Tables
 
 `tableStrategy` controls how table regions are detected. Set it to
-`null` to disable detection entirely.
+`null` to disable detection entirely. Where the cell text comes from is
+a separate option, `textSource` — see [OCR for tables](/guide/ocr).
 
 ## `lines_strict` (default)
 
@@ -10,7 +11,7 @@ parity with PyMuPDF for ruled tables (financial reports, spec sheets,
 scientific tables with rules on every cell boundary).
 
 ```ts
-toMarkdown(buf); // implicit "lines_strict"
+await toMarkdown(buf); // implicit "lines_strict"
 ```
 
 ## `lines`
@@ -20,7 +21,7 @@ with partial rules — e.g. only horizontal separators, or thin
 hair-lines that fall below the strict 3-px threshold.
 
 ```ts
-toMarkdown(buf, { tableStrategy: "lines" });
+await toMarkdown(buf, { tableStrategy: "lines" });
 ```
 
 ## `text`
@@ -38,7 +39,7 @@ Lightweight port — for tables with no rules it produces a usable grid
 but the column boundaries are heuristic and may not byte-match PyMuPDF.
 
 ```ts
-toMarkdown(buf, { tableStrategy: "text" });
+await toMarkdown(buf, { tableStrategy: "text" });
 ```
 
 ## `explicit`
@@ -47,7 +48,7 @@ Pass the grid yourself. Useful when you already know cell boundaries
 (e.g. from a layout-aware preprocessing pass).
 
 ```ts
-toMarkdown(buf, {
+await toMarkdown(buf, {
   tableStrategy: "explicit",
   explicitTableGrids: [
     {
@@ -58,15 +59,26 @@ toMarkdown(buf, {
 });
 ```
 
+## `pixels`
+
+Finds the ruling lines on the **rendered page** rather than in the PDF
+drawings, so it works on scans. Cell text comes from OCR by default —
+see [OCR for tables](/guide/ocr).
+
+```ts
+await toMarkdown(buf, { tableStrategy: "pixels" });
+```
+
 ## Inspecting detected tables
 
 In `pageChunks` mode every detected table surfaces in `PageChunk.tables`:
 
 ```ts
-const chunks = toMarkdownPages(buf);
+const chunks = await toMarkdownPages(buf);
 for (const c of chunks) {
   for (const t of c.tables) {
     console.log(t.bbox, t.rows, t.columns);
+    console.log(t.cells); // [row][col] → { text, source: "pdf" | "ocr" | "failed" } | null
   }
 }
 ```

@@ -26,6 +26,15 @@ bun run lint:check     # CI-style — fails on style drift instead of fixing it
 bun run build          # emits dist/{index,llama}.{js,cjs,d.ts}
 ```
 
+OCR tests use a fake engine. To also run the real RapidOCR test (downloads
+~13 MB of models on first run):
+
+```sh
+# install next to the repo, not into package.json (they are optional peers)
+npm i --prefix .. --no-package-lock ppu-paddle-ocr onnxruntime-node
+MUPDF4LLM_OCR_IT=1 bun test tests/ocr.test.ts
+```
+
 Docs:
 
 ```sh
@@ -63,11 +72,13 @@ src/
       formFields.ts         getKeyValues — port of utils.get_key_values
   llama/
 pdfMarkdownReader.ts    LlamaIndex adapter (@nalinor/mupdf4llm/llama subpath)
-  ocr/
-    README.md               why no OCR + tesseract.js recipe
+  helpers/ocr/              OcrEngine interface, page raster/crops, RapidOCR adapter,
+                            per-cell text sourcing (textSource)
+  helpers/tables/pixelGrid.ts  ruling-line detection on the rendered page ("pixels")
 tests/
   fixtures.test.ts          synthetic (exact) + vendored (tiered) parity fixtures
   units.test.ts             unit tests for utils, geometry, progress, headers
+  ocr.test.ts               pixels strategy, textSource, OCR engine plumbing
   fixtures/                 vendored real-world PDFs (public domain / MIT)
                             + synthetic table PDFs (see make-table-fixtures.ts)
 docs/                       VitePress + TypeDoc documentation site
