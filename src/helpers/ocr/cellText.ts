@@ -63,28 +63,40 @@ export function looksBroken(text: string): boolean {
   return word < t.length / 2;
 }
 
+/** A font is broken with at least this many broken characters... */
+const BROKEN_FONT_MIN = 3;
+/** ...making up at least this share of its text. */
+const BROKEN_FONT_SHARE = 0.05;
+
 /**
- * Fonts whose text cannot be trusted: a font with broken characters (see
- * {@link looksBroken}) in some of its text. A font embedded without a
- * ToUnicode map and with glyphs numbered in order of use yields control
- * characters for its first glyphs and printable ASCII gibberish for the
- * rest, which on its own passes for text.
+ * Fonts whose text cannot be trusted: a font with a fair share of broken
+ * characters (see {@link looksBroken}). A font embedded without a ToUnicode
+ * map and with glyphs numbered in order of use yields control characters
+ * for its first glyphs and printable ASCII gibberish for the rest, which on
+ * its own passes for text. A healthy font with a symbol or two that do not
+ * map (a footnote mark, a bullet) is not broken: only those cells are.
  */
 export function brokenFonts(blocks: Block[]): Set<string> {
-  const count = new Map<string, number>();
+  const bad = new Map<string, number>();
+  const all = new Map<string, number>();
   for (const b of blocks) {
     if (b.type !== 0) continue;
     for (const l of b.lines) {
       for (const s of l.spans) {
         for (const ch of s.chars) {
-          if (!BROKEN_CHAR.test(ch.c)) continue;
+          if (/\s/.test(ch.c)) continue;
           const f = fontKey(s.font, ch.fontId);
-          count.set(f, (count.get(f) ?? 0) + 1);
+          all.set(f, (all.get(f) ?? 0) + 1);
+          if (BROKEN_CHAR.test(ch.c)) bad.set(f, (bad.get(f) ?? 0) + 1);
         }
       }
     }
   }
-  return new Set([...count].filter(([, n]) => n >= 2).map(([f]) => f));
+  return new Set(
+    [...bad]
+      .filter(([f, n]) => n >= BROKEN_FONT_MIN && n >= BROKEN_FONT_SHARE * all.get(f)!)
+      .map(([f]) => f),
+  );
 }
 
 const fontKey = (name: string, id?: number) => (id === undefined ? name : `${name}#${id}`);

@@ -521,6 +521,38 @@ function type3NoUnicodeGrid() {
   console.log(`wrote ${OUT}/type3-no-tounicode-grid.pdf`);
 }
 
+/**
+ * A healthy font with one bad entry: its ToUnicode map sends only the
+ * footnote mark "*" to the Private Use Area, as fonts often do for a symbol
+ * or two. The rest of its text, in the table and in the footnote, is fine.
+ */
+function footnoteMarksGrid() {
+  const doc = new mupdf.PDFDocument();
+  const cmap =
+    "/CIDInit /ProcSet findresource begin 12 dict begin begincmap " +
+    "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def " +
+    "/CMapName /Marks def /CMapType 2 def 1 begincodespacerange <00> <FF> endcodespacerange " +
+    "3 beginbfrange <20> <29> <0020> <2A> <2A> <E000> <2B> <7E> <002B> endbfrange endcmap " +
+    "CMapName currentdict /CMap defineresource pop end end";
+  const font = doc.addObject({
+    Type: "Font",
+    Subtype: "Type1",
+    BaseFont: "Helvetica",
+    Encoding: "WinAnsiEncoding",
+    ToUnicode: doc.addStream(cmap, {}),
+  });
+  const resources = doc.addObject({ Font: { F1: font } });
+  const content =
+    plainGridContent()
+      .replace("(North)", "(North*)")
+      .replace("(East)", "(East*)")
+      .replace("(West)", "(West*)") +
+    text(60, 620, "* Placeholder footnote: the marked regions were counted twice.", 10);
+  doc.insertPage(-1, doc.addPage([0, 0, W, H], 0, resources, content));
+  writeFileSync(`${OUT}/footnote-marks-grid.pdf`, doc.saveToBuffer("compress").asUint8Array());
+  console.log(`wrote ${OUT}/footnote-marks-grid.pdf`);
+}
+
 const all: Record<string, () => void> = {
   compoundStrokeGrid,
   compoundFillGrid,
@@ -533,6 +565,7 @@ const all: Record<string, () => void> = {
   scannedGrid,
   brokenTextGrid,
   type3NoUnicodeGrid,
+  footnoteMarksGrid,
 };
 const only = process.argv.slice(2);
 for (const [name, make] of Object.entries(all)) if (!only.length || only.includes(name)) make();

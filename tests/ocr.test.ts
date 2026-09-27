@@ -364,6 +364,19 @@ describe("auto with a font whose codes are broken", () => {
     ]);
     expect(ocr.calls.length).toBe(20);
   });
+
+  test("a few bad symbols in a healthy font OCR only their own cells", async () => {
+    const ocr = fakeEngine();
+    const [page] = await toMarkdownPages(fixture("footnote-marks-grid.pdf"), {
+      textSource: "auto",
+      ocr,
+    });
+    const cells = page!.tables[0]!.cells;
+    // "North*", "East*", "West*" hold the bad mark; the other 17 cells read fine.
+    expect(ocr.calls.length).toBe(3);
+    expect(cells[0]!.map((c) => c!.text)).toEqual(["No", "Region", "Count", "Share"]);
+    expect(cells[2]!.map((c) => c!.source)).toEqual(["pdf", "pdf", "pdf", "pdf"]);
+  });
 });
 
 // Real RapidOCR (ppu-paddle-ocr + onnxruntime-node); downloads models on first run.
