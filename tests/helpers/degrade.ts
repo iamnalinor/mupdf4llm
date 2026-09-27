@@ -29,7 +29,9 @@ export function degrade(buf: Uint8Array, o: Degradation): Uint8Array {
   const w = pm.getWidth();
   const h = pm.getHeight();
   const stride = pm.getStride();
-  const src = pm.getPixels();
+  // mupdf returns views into WASM memory, which later allocations can move:
+  // copy the source pixels before creating the output pixmap.
+  const src = pm.getPixels().slice();
   const out = new mupdf.Pixmap(mupdf.ColorSpace.DeviceGray, [0, 0, w, h], false);
   const dst = out.getPixels();
   const a = ((o.deg ?? 0) * Math.PI) / 180;
@@ -56,5 +58,5 @@ export function degrade(buf: Uint8Array, o: Degradation): Uint8Array {
   const H = by1 - by0;
   const res = doc.addObject({ XObject: { Im0: img } });
   doc.insertPage(-1, doc.addPage([0, 0, W, H], 0, res, `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q\n`));
-  return doc.saveToBuffer("compress").asUint8Array();
+  return doc.saveToBuffer("compress").asUint8Array().slice();
 }

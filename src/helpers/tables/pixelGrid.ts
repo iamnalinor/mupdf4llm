@@ -405,8 +405,14 @@ function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | nul
       const rb = rows[rows.indexOf(ra) + 1]!;
       for (const x of vLines.slice(1, -1)) {
         const ruled = inner.some((v) => v.x === x && v.y0 < rb - DOUBLE && v.y1 > ra + DOUBLE);
+        // Groups can be told apart by shading instead of a rule.
+        const shaded =
+          Math.abs(paper(raster, x - 6, x - 2, ra, rb) - paper(raster, x + 2, x + 6, ra, rb)) > 12;
         const mid = (ra + rb) / 2;
-        if (!ruled) words.push([x - 2, mid - 0.5, x + 2, mid + 0.5]);
+        if (ruled) continue;
+        // A change of shading separates like a rule would.
+        if (shaded) inner.push({ x, y0: ra, y1: rb });
+        else words.push([x - 2, mid - 0.5, x + 2, mid + 0.5]);
       }
     }
   }
@@ -415,6 +421,28 @@ function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | nul
     vLines: [{ x: x0, y0, y1 }, ...inner, { x: x1, y0, y1 }],
     words,
   };
+}
+
+/** Median grey of the paper (non-ink pixels) in a page-coordinate box. */
+function paper(raster: PageRaster, x0: number, x1: number, y0: number, y1: number): number {
+  const { width: w, data } = raster;
+  const ink = raster.ink;
+  const pad = Math.ceil(raster.scale * 1.5);
+  const hist = new Uint32Array(256);
+  let n = 0;
+  for (let py = raster.pixelY(y0) + pad; py <= raster.pixelY(y1) - pad; py++) {
+    for (let px = raster.pixelX(x0); px <= raster.pixelX(x1); px++) {
+      if (ink[py * w + px]) continue;
+      hist[data[py * w + px]!]!++;
+      n++;
+    }
+  }
+  let acc = 0;
+  for (let v = 0; v < 256; v++) {
+    acc += hist[v]!;
+    if (acc * 2 >= n) return v;
+  }
+  return 255;
 }
 
 /**
@@ -444,18 +472,20 @@ function inkEdge(raster: PageRaster, x: number, y0: number, y1: number, dir: -1 
   return raster.pageX(last) + dir / scale;
 }
 
-type TextLine = {
+export type TextLine = {
   top: number;
   bottom: number;
   /** Number of columns with ink. */
   cols: number;
   /** Ink in the first column. */
   first: boolean;
+  /** Index of the run of inked rows the line was cut from. */
+  run: number;
   words: BBox[];
 };
 
 /** Row boundaries (page y) inside one band of a table, from its text lines. */
-function rowBreaks(lines: TextLine[], ncol: number, ruled: boolean): number[] {
+export function rowBreaks(lines: TextLine[], ncol: number, ruled: boolean): number[] {
   if (lines.length < 2) return [];
   const heights = lines.map((l) => l.bottom - l.top).sort((a, b) => a - b);
   const lineH = heights[heights.length >> 1]!;
@@ -466,7 +496,9 @@ function rowBreaks(lines: TextLine[], ncol: number, ruled: boolean): number[] {
   // a second column with its hyphen or leader dots.
   const need = Math.max(2, Math.ceil(ncol / 2));
   const isAnchor = (l: TextLine) => l.cols >= need;
-  if (ruled && lines.filter(isAnchor).length <= 1) return [];
+  // Between two rules, data lines cut from one run of ink are one line: the
+  // waist of a digit ("0", "6") can look like the gap between two lines.
+  if (ruled && new Set(lines.filter(isAnchor).map((l) => l.run)).size <= 1) return [];
   // Without any multi-column line, every text line is a row.
   if (!lines.some(isAnchor)) return breaksBetween(lines.map((l) => [l]));
 
@@ -627,26 +659,30 @@ function textLines(raster: PageRaster, vLines: number[], top: number, bottom: nu
   // Lines set solid (no blank row between them) come out as one run. Cut it
   // at a clear valley of the ink profile — between the descenders of one
   // line and the ascenders of the next — when both parts are line-high.
-  const split: [number, number][] = [];
+  const split: [number, number, number][] = [];
+  let runId = 0;
   const cut = (a: number, b: number) => {
     let best = -1;
     const m = Math.ceil(minLine);
     for (let r = a + m; r <= b - m; r++) {
       if (best < 0 || rowInk[r]! < rowInk[best]!) best = r;
     }
-    if (best < 0) return void split.push([a, b]);
+    if (best < 0) return void split.push([a, b, runId]);
     const above = Math.max(...rowInk.slice(a, best));
     const below = Math.max(...rowInk.slice(best + 1, b + 1));
-    if (rowInk[best]! > 0.35 * Math.min(above, below)) return void split.push([a, b]);
+    if (rowInk[best]! > 0.35 * Math.min(above, below)) return void split.push([a, b, runId]);
     cut(a, best - 1);
     cut(best + 1, b);
   };
-  for (const [a, b] of spans) cut(a, b);
+  for (const [a, b] of spans) {
+    cut(a, b);
+    runId++;
+  }
 
   // Letter-spaced labels ("A G G R E G A T E") stay one word.
   const gapPx = Math.round(scale * 3.5);
   const out: TextLine[] = [];
-  for (const [a, b] of split) {
+  for (const [a, b, run] of split) {
     const sums = new Array<number>(ncol).fill(0);
     for (let r = a; r <= b; r++) inkPerRow[r]!.forEach((v, c) => (sums[c]! += v));
     // Show-through from the back of the page leaves a little ink in empty
@@ -688,7 +724,7 @@ function textLines(raster: PageRaster, vLines: number[], top: number, bottom: nu
       }
     }
     flushWord();
-    out.push({ top, bottom: bot, cols, first, words });
+    out.push({ top, bottom: bot, cols, first, run, words });
   }
   return out;
 }

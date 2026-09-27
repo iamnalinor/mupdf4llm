@@ -5,7 +5,7 @@ import { toMarkdown, toMarkdownPages, createRapidOcr, OcrSetupError, Rect } from
 import type { OcrEngine, OcrImage } from "../src/index";
 import { PageRaster } from "../src/helpers/ocr/engine";
 import { looksBroken } from "../src/helpers/ocr/cellText";
-import { detectRulings } from "../src/helpers/tables/pixelGrid";
+import { detectRulings, rowBreaks } from "../src/helpers/tables/pixelGrid";
 import { degrade, type Degradation } from "./helpers/degrade";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(`tests/fixtures/${name}`));
@@ -27,6 +27,29 @@ const rows = (md: string) =>
     .split("\n")
     .filter((l) => l.startsWith("|") && !l.startsWith("|---"))
     .map((l) => l.slice(1, -1).split("|"));
+
+describe("rowBreaks", () => {
+  const line = (top: number, cols: number, run: number) => ({
+    top,
+    bottom: top + 5,
+    cols,
+    first: cols > 1,
+    run,
+    words: [],
+  });
+
+  test("between rules, data lines cut from one run of ink are one row", () => {
+    // Values centred beside a wrapped label: the waist of the digits was
+    // taken for a gap, so the value line came out as two "data lines".
+    const lines = [line(0, 6, 0), line(5.5, 5, 0), line(11, 1, 1)];
+    expect(rowBreaks(lines, 6, true)).toEqual([]);
+  });
+
+  test("between rules, data lines from separate runs are separate rows", () => {
+    const lines = [line(0, 6, 0), line(8, 6, 1)];
+    expect(rowBreaks(lines, 6, true)).toEqual([6.5]);
+  });
+});
 
 describe("detectRulings", () => {
   // 100 dpi-ish raster (scale 1.5), white background.
@@ -376,10 +399,45 @@ describe("pixels strategy on real scans", () => {
     );
     c += "Q\n";
     doc.insertPage(-1, doc.addPage([0, 0, 595, 842], 0, doc.addObject({ Font: { F1: font } }), c));
-    const buf = doc.saveToBuffer("compress").asUint8Array();
+    const buf = doc.saveToBuffer("compress").asUint8Array().slice();
     const [page] = await toMarkdownPages(buf, { tableStrategy: "pixels", textSource: "pdf" });
     expect(page!.tables[0]!.cells.map((r) => r.map((x) => x?.text))).toEqual(words);
   });
+
+  /** A one-page PDF drawn with Helvetica as F1. */
+  const drawn = (content: string) => {
+    const doc = new mupdf.PDFDocument();
+    const font = doc.addSimpleFont(new mupdf.Font("Helvetica"));
+    const res = doc.addObject({ Font: { F1: font } });
+    doc.insertPage(-1, doc.addPage([0, 0, 595, 842], 0, res, content));
+    return doc.saveToBuffer("compress").asUint8Array().slice();
+  };
+  const text = (x: number, y: number, s: string) => `BT /F1 9 Tf ${x} ${y} Td (${s}) Tj ET\n`;
+
+  test("group labels told apart by shading, not by a rule, stay separate", async () => {
+    // Two groups of three columns; the second group is shaded grey and no
+    // rule separates the groups in the group-label row.
+    const cols = [60, 150, 200, 250, 300, 350, 400, 450];
+    let c = "0.85 g 300 700 150 40 re f 0 g\n0 G 0.8 w\n";
+    for (const y of [740, 720, 700, 680, 660]) c += `${cols[0]} ${y} m 450 ${y} l S\n`;
+    for (const x of [60, 150, 450]) c += `${x} 740 m ${x} 660 l S\n`;
+    for (const x of [200, 250, 300, 350, 400]) c += `${x} 720 m ${x} 660 l S\n`;
+    c += text(190, 727, "Group one") + text(340, 727, "Group two") + text(64, 707, "Name");
+    for (let k = 1; k < 7; k++) c += text(cols[k]! + 6, 707, `c${k}`);
+    for (const [y, lab] of [
+      [687, "Row a"],
+      [667, "Row b"],
+    ] as const) {
+      c += text(64, y, lab);
+      for (let k = 1; k < 7; k++) c += text(cols[k]! + 6, y, String(k));
+    }
+    const [page] = await toMarkdownPages(degrade(drawn(c), { dpi: 300, q: 90 }), {
+      tableStrategy: "pixels",
+      ocr: fakeEngine(),
+    });
+    const header = page!.tables[0]!.cells[0]!;
+    expect(header.map((x) => (x === null ? "-" : "x")).join("")).toBe("xx--x--");
+  }, 60_000);
 
   test("group header labels become merged cells", async () => {
     const [page] = await toMarkdownPages(fixture("scan-us-census-1900.pdf"), {
