@@ -597,6 +597,33 @@ describe("scans turned a quarter without /Rotate", () => {
     }
   }, 60_000);
 
+  test("inkAxis is never wrong on scans fed askew, at worst unsure", () => {
+    const axes = (name: string) =>
+      [0, 1.5, 3, -3].map((deg) => inkAxis(raster(degrade(fixture(name), { deg }))));
+    for (const name of [
+      "scan-ru-prose-1918.pdf",
+      "scan-ru-census-1918.pdf",
+      "scan-us-census-1900.pdf",
+    ])
+      expect(axes(name)).toEqual(["upright", "upright", "upright", "upright"]);
+    // A dense table of figures: its rows are nearly as close as its columns.
+    expect(axes("scan-in-abstract-1901-table.pdf")).not.toContain("sideways");
+    const across = axes("scan-us-abstract-1909-sideways.pdf");
+    expect(across).not.toContain("upright");
+    expect(across.filter((a) => a === "sideways").length).toBeGreaterThanOrEqual(3);
+  }, 60_000);
+
+  test("an upright table page is not turned", async () => {
+    const buf = fixture("scan-in-abstract-1901-table.pdf");
+    const on = await toMarkdown(buf, { tableStrategy: "pixels", ocr: fakeEngine() });
+    const off = await toMarkdown(buf, {
+      tableStrategy: "pixels",
+      ocr: fakeEngine(),
+      detectOrientation: false,
+    });
+    expect(on).toBe(off);
+  }, 60_000);
+
   for (const quarter of [90, 270] as const) {
     test(`census 1918 turned ${quarter}° keeps its 6 columns`, async () => {
       const [t] = await shapes(degrade(fixture("scan-ru-census-1918.pdf"), { quarter }));

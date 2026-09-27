@@ -33,7 +33,13 @@ identifier `b32182661_0003` (Public Domain Mark); `scan-ru-census-1918.pdf`
 and `scan-ru-prose-1918.pdf` — «Всероссийская промышленная и
 профессиональная перепись 1918 года», ЦСУ, 1920, identifier
 `vserossijskajapromyshlennajaiprofessiona91` (a state publication without
-personal authors, over 100 years old). Only add scans whose public-domain
+personal authors, over 100 years old); `scan-in-abstract-1901-table.pdf` —
+Statistical Abstract relating to British India, HMSO, London, 1901,
+identifier `india.history.resource.108757`; `scan-us-abstract-1909-sideways.pdf`
+— Statistical abstract of foreign countries, Government Printing Office,
+Washington, 1909 (a work of the US government), identifier
+`cu31924030388791`. `scripts/make-scan-fixtures.ts` rebuilds the last two
+from the archive's page images. Only add scans whose public-domain
 status is clear. `tests/helpers/degrade.ts` makes worse copies of them
 (skew, noise, specks, low resolution) for the robustness tests.
 

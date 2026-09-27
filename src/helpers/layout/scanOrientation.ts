@@ -4,47 +4,102 @@ import { removeRotation } from "./pageRotation";
 
 export type InkAxis = "upright" | "sideways" | "unknown";
 
-/** One axis must be this much sharper than the other to decide. */
-const AXIS_RATIO = 1.5;
+/** One direction must win this many times more neighbour votes to decide. */
+const AXIS_VOTES = 3;
+/** Fewer glyph-sized pieces of ink than this do not tell. */
+const MIN_GLYPHS = 200;
 
 /**
- * Which way the lines of a scanned page run. Text lines and table rows put
- * many ink edges (paper to ink) into the pixel rows they cross and almost
- * none into the gaps between them, so the count of edges per pixel row
- * jumps from line to gap; per pixel column it varies smoothly. The axis
- * whose edge profile is sharper — the larger sum of squared steps between
- * neighbours, relative to the profile's own size — runs across the lines.
- * `"unknown"` when neither is clearly sharper or there is too little ink.
+ * Which way the lines of a scanned page run. Letters stand closer to the
+ * letters beside them in a word, and words to the words beside them in a
+ * line, than to anything in the lines above and below. So each glyph- or
+ * word-sized piece of ink (a connected component no bigger than 5% of the
+ * page side) votes for the direction of its nearest neighbour: across the
+ * page for upright lines, down the page for lines turned sideways. Rules,
+ * borders, a book's edge or the dark surround of a photographed page are
+ * too large to vote, and slight skew or curl does not matter. `"unknown"`
+ * when neither direction wins clearly or there is too little text.
  */
 export function inkAxis(raster: PageRaster): InkAxis {
   const { width: w, height: h } = raster;
   const ink = raster.ink;
-  const rows = new Float64Array(h);
-  const cols = new Float64Array(w);
-  let edges = 0;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      if (!ink[i]) continue;
-      if (x > 0 && !ink[i - 1]) rows[y]!++;
-      if (y > 0 && !ink[i - w]) cols[x]!++;
-      edges++;
+  const maxSide = 0.05 * Math.max(w, h);
+  // Connected pieces of ink, as boxes.
+  const seen = new Uint8Array(w * h);
+  const boxes: [number, number, number, number][] = [];
+  const stack: number[] = [];
+  for (let start = 0; start < w * h; start++) {
+    if (!ink[start] || seen[start]) continue;
+    let [x0, y0, x1, y1] = [w, h, 0, 0];
+    let n = 0;
+    seen[start] = 1;
+    stack.push(start);
+    while (stack.length) {
+      const i = stack.pop()!;
+      const x = i % w;
+      const y = (i - x) / w;
+      n++;
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+      const next = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w];
+      for (const k of next) {
+        if (k >= 0 && k < w * h && ink[k] && !seen[k]) {
+          seen[k] = 1;
+          stack.push(k);
+        }
+      }
     }
+    const bw = x1 - x0 + 1;
+    const bh = y1 - y0 + 1;
+    if (n >= 4 && bw >= 2 && bh >= 2 && bw <= maxSide && bh <= maxSide)
+      boxes.push([x0, y0, x1, y1]);
   }
-  if (edges < 1000) return "unknown";
-  const sharp = (p: Float64Array) => {
-    let d = 0;
-    let s = 0;
-    for (let i = 1; i < p.length; i++) {
-      d += (p[i]! - p[i - 1]!) ** 2;
-      s += p[i]! ** 2;
+  if (boxes.length < MIN_GLYPHS) return "unknown";
+
+  // Nearest neighbour by the gap between boxes, looked up in a grid of cells.
+  const cell = Math.ceil(12 * raster.scale);
+  const grid = new Map<number, number[]>();
+  const key = (gx: number, gy: number) => gy * 65536 + gx;
+  const cx = boxes.map((b) => (b[0] + b[2]) / 2);
+  const cy = boxes.map((b) => (b[1] + b[3]) / 2);
+  boxes.forEach((_, i) => {
+    const k = key(Math.floor(cx[i]! / cell), Math.floor(cy[i]! / cell));
+    const list = grid.get(k);
+    if (list) list.push(i);
+    else grid.set(k, [i]);
+  });
+  let across = 0;
+  let down = 0;
+  boxes.forEach((b, i) => {
+    const gx = Math.floor(cx[i]! / cell);
+    const gy = Math.floor(cy[i]! / cell);
+    let best = Infinity;
+    let dx = 0;
+    let dy = 0;
+    for (let ox = -1; ox <= 1; ox++) {
+      for (let oy = -1; oy <= 1; oy++) {
+        for (const j of grid.get(key(gx + ox, gy + oy)) ?? []) {
+          if (j === i) continue;
+          const o = boxes[j]!;
+          const gapX = Math.max(0, o[0] - b[2], b[0] - o[2]);
+          const gapY = Math.max(0, o[1] - b[3], b[1] - o[3]);
+          const d = Math.hypot(gapX, gapY);
+          if (d < best) {
+            best = d;
+            dx = Math.abs(cx[j]! - cx[i]!);
+            dy = Math.abs(cy[j]! - cy[i]!);
+          }
+        }
+      }
     }
-    return s ? d / s : 0;
-  };
-  const across = sharp(rows);
-  const along = sharp(cols);
-  if (across >= AXIS_RATIO * along) return "upright";
-  if (along >= AXIS_RATIO * across) return "sideways";
+    if (best === Infinity) return;
+    if (dx > 2 * dy) across++;
+    else if (dy > 2 * dx) down++;
+  });
+  if (across >= AXIS_VOTES * down) return "upright";
+  if (down >= AXIS_VOTES * across) return "sideways";
   return "unknown";
 }
 
