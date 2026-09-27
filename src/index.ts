@@ -13,7 +13,12 @@ export type {
   CellText,
 } from "./helpers/types";
 export type { OcrEngine, OcrImage } from "./helpers/ocr/engine";
-export { createRapidOcr, type RapidOcrOptions, type RapidOcrModel } from "./helpers/ocr/rapidOcr";
+export {
+  createRapidOcr,
+  OcrSetupError,
+  type RapidOcrOptions,
+  type RapidOcrModel,
+} from "./helpers/ocr/rapidOcr";
 export { IdentifyHeaders, TocHeaders } from "./helpers/text/identifyHeaders";
 export { getKeyValues } from "./helpers/forms/formFields";
 export { extractWords, type Word } from "./helpers/text/extractWords";

@@ -1,10 +1,10 @@
 import { test, expect, describe } from "bun:test";
 import { readFileSync } from "node:fs";
-import { toMarkdown, toMarkdownPages, createRapidOcr, Rect } from "../src/index";
+import * as mupdf from "mupdf";
+import { toMarkdown, toMarkdownPages, createRapidOcr, OcrSetupError, Rect } from "../src/index";
 import type { OcrEngine, OcrImage } from "../src/index";
 import { PageRaster } from "../src/helpers/ocr/engine";
 import { looksBroken } from "../src/helpers/ocr/cellText";
-import { OcrSetupError } from "../src/helpers/ocr/rapidOcr";
 import { detectRulings } from "../src/helpers/tables/pixelGrid";
 import { degrade, type Degradation } from "./helpers/degrade";
 
@@ -201,6 +201,21 @@ describe("textSource on a vector grid with a broken text layer", () => {
     expect(pua.test(page!.text)).toBe(false);
   });
 
+  test('"auto" keeps the text-layer text of a cell whose OCR failed', async () => {
+    const ocr: OcrEngine = {
+      async recognize() {
+        throw new Error("engine down");
+      },
+    };
+    const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"), {
+      textSource: "auto",
+      ocr,
+    });
+    const cell = page!.tables[0]!.cells[1]![1]!;
+    expect(cell.source).toBe("failed");
+    expect(pua.test(cell.text)).toBe(true);
+  });
+
   test('"auto" on a healthy document never calls OCR', async () => {
     const ocr = fakeEngine();
     const buf = fixture("merged-cells-grid.pdf");
@@ -322,6 +337,49 @@ describe("pixels strategy on real scans", () => {
       }
     }, 60_000);
   }
+
+  test("a scan of a table ruled on every row keeps multi-line cells in one row", async () => {
+    // Image-only copies of vector fixtures: the rows must match "lines".
+    for (const file of ["white-cell-backgrounds.pdf", "merged-cells-grid.pdf"]) {
+      const lines = await toMarkdownPages(fixture(file), { tableStrategy: "lines" });
+      const scan = await toMarkdownPages(degrade(fixture(file), { dpi: 300, q: 90 }), {
+        tableStrategy: "pixels",
+        ocr: fakeEngine(),
+      });
+      const shape = (ps: typeof lines) =>
+        ps.flatMap((p) => p.tables.map((t) => [t.rows, t.columns]));
+      expect(shape(scan)).toEqual(shape(lines));
+    }
+  }, 60_000);
+
+  test("pixels with the PDF text layer on a page scanned askew", async () => {
+    // A searchable scan: grid and text both turned by 2.5°, the table near
+    // the page corner where turning moves it most.
+    const doc = new mupdf.PDFDocument();
+    const font = doc.addSimpleFont(new mupdf.Font("Helvetica"));
+    const a = (2.5 * Math.PI) / 180;
+    const cm = `${Math.cos(a)} ${Math.sin(a)} ${-Math.sin(a)} ${Math.cos(a)} 0 0 cm`;
+    const cols = [60, 160, 300, 400];
+    const rowsY = [800, 776, 752, 728];
+    let c = `q ${cm} 0 G 1 w\n`;
+    for (const y of rowsY) c += `${cols[0]} ${y} m ${cols.at(-1)} ${y} l S\n`;
+    for (const x of cols) c += `${x} ${rowsY[0]} m ${x} ${rowsY.at(-1)} l S\n`;
+    const words = [
+      ["Name", "Region", "Count"],
+      ["North", "East", "120"],
+      ["South", "West", "90"],
+    ];
+    words.forEach((row, r) =>
+      row.forEach(
+        (w, k) => (c += `BT /F1 12 Tf ${cols[k]! + 6} ${rowsY[r]! - 16} Td (${w}) Tj ET\n`),
+      ),
+    );
+    c += "Q\n";
+    doc.insertPage(-1, doc.addPage([0, 0, 595, 842], 0, doc.addObject({ Font: { F1: font } }), c));
+    const buf = doc.saveToBuffer("compress").asUint8Array();
+    const [page] = await toMarkdownPages(buf, { tableStrategy: "pixels", textSource: "pdf" });
+    expect(page!.tables[0]!.cells.map((r) => r.map((x) => x?.text))).toEqual(words);
+  });
 
   test("group header labels become merged cells", async () => {
     const [page] = await toMarkdownPages(fixture("scan-us-census-1900.pdf"), {

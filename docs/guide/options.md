@@ -99,12 +99,12 @@ no legacy option disabled it.
 
 ```ts
 // Plain text, headers and tables — but no bold/italic and no <br> in cells.
-toMarkdown(buf, {
+await toMarkdown(buf, {
   elements: ["header", "table", "link", "bulletList", "italic"],
 });
 
 // Strip all markup — just text.
-toMarkdown(buf, { elements: [] });
+await toMarkdown(buf, { elements: [] });
 ```
 
 ## Misc

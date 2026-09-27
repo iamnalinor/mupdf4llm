@@ -18,7 +18,11 @@ export interface RapidOcrOptions {
   model?: string | RapidOcrModel;
 }
 
-/** OCR cannot run at all (package missing, bad model); raised instead of failing single cells. */
+/**
+ * OCR cannot run at all (package missing, bad model, a service that rejects
+ * the credentials). It aborts the conversion instead of marking every cell
+ * as failed; custom engines throw it for such fatal problems.
+ */
 export class OcrSetupError extends Error {}
 
 export const OCR_INSTALL_HINT = "npm install ppu-paddle-ocr onnxruntime-node";

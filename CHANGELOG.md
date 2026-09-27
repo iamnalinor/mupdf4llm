@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed (breaking)
 
 - `toMarkdown` and `toMarkdownPages` are async and return a `Promise`:
-  write `await toMarkdown(buf)`. Output for the same options is unchanged.
+  write `await toMarkdown(buf)`. The markdown for the same options is
+  unchanged; `PageChunk.tables[]` gains a `cells` field (additive).
   `PDFMarkdownReader.loadData` was already async.
 
 ### Added
@@ -37,7 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dependencies `ppu-paddle-ocr` + `onnxruntime-node`), loaded only when a
   cell needs OCR. A multi-line cell is recognised line by line when the
   whole-cell result misses lines; leader dots are removed. `createRapidOcr({ model })` creates a reusable engine;
-  a missing package or model rejects with `OcrSetupError`.
+  a missing package or model rejects with `OcrSetupError` (exported),
+  which custom engines throw for fatal setup problems too.
   OCR runs per table cell, not per page.
 - `PageChunk.tables[].cells` holds each cell's plain text and its source
   (`"pdf"`, `"ocr"` or `"failed"`). An OCR error or empty result for a

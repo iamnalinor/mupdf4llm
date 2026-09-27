@@ -65,11 +65,18 @@ export async function ocrTableCells(
         // recognise the cell line by line.
         const lines = raster.cropLines(Rect.from(cell));
         if (lines.length > 1 && text.split("\n").filter(Boolean).length < lines.length) {
-          const perLine = (await Promise.all(lines.map(read))).filter(Boolean);
+          // One call at a time: engines may not handle parallel requests.
+          const perLine: string[] = [];
+          for (const img of lines) {
+            const t = await read(img);
+            if (t) perLine.push(t);
+          }
           if (perLine.length > text.split("\n").filter(Boolean).length) text = perLine.join("\n");
         }
-        // Only dots read (an empty value) is a result; nothing read is a failure.
-        tab.setCellText(r, c, { text: stripLeaders(text), source: text ? "ocr" : "failed" });
+        // Only dots read (an empty value) is a result; nothing read is a
+        // failure. Under "auto" a failed cell keeps its text-layer text.
+        if (text) tab.setCellText(r, c, { text: stripLeaders(text), source: "ocr" });
+        else tab.setCellText(r, c, { text: texts ? texts[r]![c]!.text : "", source: "failed" });
       }
     }
   }

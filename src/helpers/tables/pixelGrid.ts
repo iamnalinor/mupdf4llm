@@ -366,6 +366,9 @@ function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | nul
     return { x0: a - x0 < MIN_COL ? x0 : a, x1: x1 - b < MIN_COL ? x1 : b };
   };
   const bands = [y0, ...hard, y1];
+  // Rules between body rows as well: a band between two of them is one row
+  // unless it holds several data lines.
+  const rowRuled = hard.length >= 2;
   const rows = [y0];
   for (let i = 0; i + 1 < bands.length; i++) {
     const top = bands[i]!;
@@ -373,7 +376,8 @@ function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | nul
     if (bottom - top < DOUBLE) continue;
     const isHeader = i === 0 && bands.length > 2 && bottom - top < 0.5 * (y1 - y0);
     if (isHeader) rows.push(...positions(headerSegs));
-    else rows.push(...rowBreaks(textLines(raster, vLines, top, bottom), vLines.length - 1));
+    else
+      rows.push(...rowBreaks(textLines(raster, vLines, top, bottom), vLines.length - 1, rowRuled));
     rows.push(bottom);
   }
   // Words over the whole table: a label may straddle a rule between rows.
@@ -451,7 +455,7 @@ type TextLine = {
 };
 
 /** Row boundaries (page y) inside one band of a table, from its text lines. */
-function rowBreaks(lines: TextLine[], ncol: number): number[] {
+function rowBreaks(lines: TextLine[], ncol: number, ruled: boolean): number[] {
   if (lines.length < 2) return [];
   const heights = lines.map((l) => l.bottom - l.top).sort((a, b) => a - b);
   const lineH = heights[heights.length >> 1]!;
@@ -462,6 +466,7 @@ function rowBreaks(lines: TextLine[], ncol: number): number[] {
   // a second column with its hyphen or leader dots.
   const need = Math.max(2, Math.ceil(ncol / 2));
   const isAnchor = (l: TextLine) => l.cols >= need;
+  if (ruled && lines.filter(isAnchor).length <= 1) return [];
   // Without any multi-column line, every text line is a row.
   if (!lines.some(isAnchor)) return breaksBetween(lines.map((l) => [l]));
 

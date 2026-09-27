@@ -40,6 +40,12 @@ What it handles, as found in real printed tables:
 
 Not handled yet: tables without any vertical rules (borderless), text
 set vertically in the header (it is recognised as noise or skipped).
+A heading set in the first column only ("Northern region") directly
+above data rows is joined to the next row like a wrapped label.
+
+On a page scanned askew, deskewing is only done with `textSource: "ocr"`
+(the default for `"pixels"`): with `"pdf"` or `"auto"` the grid must stay
+in the coordinates of the PDF's text layer.
 
 ### Accuracy
 
@@ -138,10 +144,13 @@ await toMarkdown(buf, { tableStrategy: "pixels", ocr });
 
 The image is one table cell: 8-bit grayscale (`img.data`, `img.width`,
 `img.height`) with a white margin, also available as PNG (`img.png()`).
-Return the text with lines separated by `\n`. A multi-line cell whose
+Return the text with lines separated by `\n`. Throw `OcrSetupError`
+(exported by the package) when the engine cannot work at all — a missing
+model, rejected credentials: it aborts the conversion. Any other error
+only marks that cell as `"failed"`. A multi-line cell whose
 result has fewer lines than the cell shows is recognised again line by
 line (a text detector may drop a short last line), so an engine can be
-called more than once per cell. Engines you pass in are never disposed by
+called more than once per cell, one call at a time. Engines you pass in are never disposed by
 the library.
 
 ## Which cells came from OCR
@@ -159,7 +168,8 @@ for (const row of page.tables[0].cells) {
 
 `null` marks a position covered by a merged cell. A cell is `"failed"`
 when the engine threw or returned nothing although the cell holds ink;
-it is rendered empty and processing continues. Set `DEBUG_MUPDF4LLM=1`
+it is rendered empty (under `"auto"` it keeps its text-layer text) and
+processing continues. Set `DEBUG_MUPDF4LLM=1`
 to log the errors. Cells without ink are empty and never sent to the
 engine.
 
@@ -169,6 +179,8 @@ OCR is much slower than reading the text layer. Each non-empty cell is
 one or a few model runs; the US census page above (two tables, about 300
 cells) takes about 8 seconds on one CPU core, plus about a second to load
 the models once per `toMarkdown` call when the default engine is used.
-Pass a shared engine (above) when converting many documents. This cost
+`"pixels"` also renders every page at `ocrDpi` before any OCR (about
+0.3–0.8 s per page), even pages without a table. Pass a shared engine
+(above) when converting many documents. This cost
 only applies when `"pixels"`, `"ocr"` or `"auto"` is requested; the
 default path is unchanged.

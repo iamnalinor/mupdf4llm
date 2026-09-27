@@ -458,7 +458,12 @@ async function convert(
           });
           if (detectTables) {
             // "pixels": the grids are read off the rendered page.
-            if (pixels) raster = PageRaster.render(page, ocrDpi).deskewed();
+            // Deskew only when all cell text comes from this raster: the PDF
+            // text layer stays in the page's own (skewed) coordinates.
+            if (pixels) {
+              raster = PageRaster.render(page, ocrDpi);
+              if (textSource === "ocr") raster = raster.deskewed();
+            }
             tabs = raster
               ? tablesFromGrids(td.blocks, findPixelGrids(raster))
               : findTables(td.blocks, paths, clip, {

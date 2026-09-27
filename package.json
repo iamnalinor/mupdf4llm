@@ -42,7 +42,7 @@
   },
   "peerDependencies": {
     "llamaindex": "*",
-    "onnxruntime-node": ">=1.23.2",
+    "onnxruntime-node": "^1.23.2",
     "ppu-paddle-ocr": "^6.6.0"
   },
   "peerDependenciesMeta": {
