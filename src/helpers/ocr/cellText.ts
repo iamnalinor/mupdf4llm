@@ -1,6 +1,6 @@
 import { Rect } from "../geometry";
 import type { TableData, TextSource } from "../types";
-import type { OcrEngine, PageRaster } from "./engine";
+import type { OcrEngine, OcrImage, PageRaster } from "./engine";
 import { OcrSetupError } from "./rapidOcr";
 
 const BROKEN_CHAR = /[\uFFFD\uE000-\uF8FF\u0000-\u0008\u000E-\u001F]/u;
@@ -43,23 +43,52 @@ export async function ocrTableCells(
         const cell = tab.cells[r]?.[c];
         if (!cell) continue;
         if (texts && !looksBroken(texts[r]![c]!.text)) continue;
-        const img = raster.crop(Rect.from(cell));
-        if (!img) {
+        const whole = raster.crop(Rect.from(cell));
+        if (!whole) {
           // Nothing to read. Under "auto" the (empty) text layer stands.
           if (source === "ocr") tab.setCellText(r, c, { text: "", source: "ocr" });
           continue;
         }
-        let text = "";
-        try {
-          text = (await engine.recognize(img)).trim();
-        } catch (e) {
-          // A missing OCR package is a configuration error, not a bad cell.
-          if (e instanceof OcrSetupError) throw e;
-          if (typeof process !== "undefined" && process.env?.DEBUG_MUPDF4LLM)
-            console.error(`[mupdf4llm] OCR failed for cell ${r},${c}:`, e);
+        const read = async (img: OcrImage) => {
+          try {
+            return (await engine.recognize(img)).trim();
+          } catch (e) {
+            // A missing OCR package is a configuration error, not a bad cell.
+            if (e instanceof OcrSetupError) throw e;
+            if (typeof process !== "undefined" && process.env?.DEBUG_MUPDF4LLM)
+              console.error(`[mupdf4llm] OCR failed for cell ${r},${c}:`, e);
+            return "";
+          }
+        };
+        let text = await read(whole);
+        // A detector can drop a short line from a multi-line cell; then
+        // recognise the cell line by line.
+        const lines = raster.cropLines(Rect.from(cell));
+        if (lines.length > 1 && text.split("\n").filter(Boolean).length < lines.length) {
+          const perLine = (await Promise.all(lines.map(read))).filter(Boolean);
+          if (perLine.length > text.split("\n").filter(Boolean).length) text = perLine.join("\n");
         }
-        tab.setCellText(r, c, { text, source: text ? "ocr" : "failed" });
+        // Only dots read (an empty value) is a result; nothing read is a failure.
+        tab.setCellText(r, c, { text: stripLeaders(text), source: text ? "ocr" : "failed" });
       }
     }
   }
+}
+
+/**
+ * Remove leader dots, the rows of dots that lead a label to its value
+ * ("Total ........ 1900", "машиностроение . . . . ."), and a cell that is
+ * only dots (an empty value). Two dots stay ("1900..").
+ */
+export function stripLeaders(text: string): string {
+  return text
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/\s*(?:[.·…•_]\s*){3,}/gu, " ")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter(Boolean)
+    .join("\n");
 }

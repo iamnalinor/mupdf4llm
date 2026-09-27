@@ -11,7 +11,7 @@ import type {
 import { areDisjoint } from "../utils";
 import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD } from "../constants";
 
-export type TableStrategy = "lines_strict" | "lines" | "text" | "explicit" | "pixels";
+export type TableStrategy = "lines_strict" | "lines" | "text" | "explicit";
 
 const TOL = 3; // snapping tolerance for line coordinates
 
@@ -306,13 +306,14 @@ function buildCells(
   hLines: { y: number; x0: number; x1: number }[],
   vLines: { x: number; y0: number; y1: number }[],
   blocks: Block[],
+  inkWords?: BBox[],
 ): (BBox | null)[][] {
   const nr = rows.length - 1;
   const nc = cols.length - 1;
   if (nr <= 0 || nc <= 0) return [];
   const hs = hLines.map((h) => ({ pos: h.y, lo: h.x0, hi: h.x1 }));
   const vs = vLines.map((v) => ({ pos: v.x, lo: v.y0, hi: v.y1 }));
-  const words = wordBoxes(blocks, new Rect(cols[0]!, rows[0]!, cols[nc]!, rows[nr]!));
+  const words = inkWords ?? wordBoxes(blocks, new Rect(cols[0]!, rows[0]!, cols[nc]!, rows[nr]!));
   // Does a word cross the vertical border x within the band [y0, y1)?
   const crossesV = (x: number, y0: number, y1: number) =>
     words.some((w) => {
@@ -433,7 +434,7 @@ class Table implements TableData {
   /** Cell texts that replace the text layer (OCR results), keyed by `row,col`. */
   private override = new Map<string, CellText>();
 
-  constructor(blocks: Block[], cluster: ClusterCandidate) {
+  constructor(blocks: Block[], cluster: ClusterCandidate, words?: BBox[]) {
     const cols = uniqueSorted(cluster.vLines.map((v) => v.x));
     const rows = uniqueSorted(cluster.hLines.map((h) => h.y));
     this.col_count = Math.max(0, cols.length - 1);
@@ -441,7 +442,7 @@ class Table implements TableData {
     this.blocks = blocks;
     this.bbox = [cluster.bbox.x0, cluster.bbox.y0, cluster.bbox.x1, cluster.bbox.y1];
 
-    this.cells = buildCells(cols, rows, cluster.hLines, cluster.vLines, blocks);
+    this.cells = buildCells(cols, rows, cluster.hLines, cluster.vLines, blocks, words);
     const headerRow = this.cells[0] ?? [];
     // First grid row; with merged cells its first/last entries may be null.
     const hasGrid = this.row_count > 0 && this.col_count > 0;
@@ -528,16 +529,13 @@ export function findTables(
   if (strategy === "text") {
     return findTablesByText(blocks, clip);
   }
-  // "pixels": `edges` were detected on the rendered page; from here on they
-  // are handled like drawn rules under the tolerant "lines" rules.
-  const lenient = strategy === "lines" || strategy === "pixels";
 
   // "lines" / "lines_strict" — same algorithm, "lines" is more tolerant of
   // partial/short edges.
   const drawnEdges = opts.edges ?? [];
   if (!paths.length && !drawnEdges.length) return [];
   const allEdges: { kind: "h" | "v"; x0: number; y0: number; x1: number; y1: number }[] = [];
-  const edgeMin = lenient ? 2 : 3;
+  const edgeMin = strategy === "lines" ? 2 : 3;
   for (const p of paths) {
     if (!clip.contains(p.rect) && !p.rect.intersects(clip)) continue;
     allEdges.push(...pathToEdges(p, edgeMin));
@@ -557,7 +555,7 @@ export function findTables(
   const vLines = mergeV(allEdges);
   const clusters = clusterLines(hLines, vLines);
   const out: TableData[] = [];
-  const minRows = lenient ? 1 : 2;
+  const minRows = strategy === "lines" ? 1 : 2;
   for (const cl of clusters) {
     const t = new Table(blocks, cl);
     if (t.row_count >= minRows && t.col_count >= 2) out.push(t);
@@ -600,6 +598,24 @@ function findTablesExplicit(
     out.push(new Table(blocks, { bbox, hLines: hLineRecs, vLines: vLineRecs }));
   }
   return out;
+}
+
+/** A table read off a rendered page: its rules and the boxes of its words. */
+export interface RuledGrid {
+  hLines: { y: number; x0: number; x1: number }[];
+  vLines: { x: number; y0: number; y1: number }[];
+  /** Word boxes from the pixels; decide merged cells where a rule is missing. */
+  words: BBox[];
+}
+
+/** Tables from grids found on a raster (`tableStrategy: "pixels"`). */
+export function tablesFromGrids(blocks: Block[], grids: RuledGrid[]): TableData[] {
+  return grids.map((g) => {
+    const xs = g.vLines.map((v) => v.x);
+    const ys = g.hLines.map((h) => h.y);
+    const bbox = new Rect(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys));
+    return new Table(blocks, { bbox, hLines: g.hLines, vLines: g.vLines }, g.words);
+  });
 }
 
 type TextRow = {

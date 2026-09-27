@@ -7,8 +7,8 @@ import { getRawLines } from "./text/getTextLines";
 import { IdentifyHeaders, type HeaderIdProvider } from "./text/identifyHeaders";
 import { columnBoxes } from "./layout/multiColumn";
 import { extractDrawings } from "./tables/drawingDevice";
-import { findTables } from "./tables/tableFinder";
-import { detectRulings } from "./tables/pixelGrid";
+import { findTables, tablesFromGrids, type TableStrategy } from "./tables/tableFinder";
+import { findPixelGrids } from "./tables/pixelGrid";
 import { PageRaster } from "./ocr/engine";
 import { createRapidOcr, lazyEngine } from "./ocr/rapidOcr";
 import { ocrTableCells } from "./ocr/cellText";
@@ -457,13 +457,15 @@ async function convert(
             vectors: detectTables && !pixels,
           });
           if (detectTables) {
-            // "pixels": ruling lines come from the rendered page instead.
-            if (pixels) raster = PageRaster.render(page, ocrDpi);
-            tabs = findTables(td.blocks, pixels ? [] : paths, clip, {
-              strategy,
-              edges: raster ? detectRulings(raster) : edges,
-              explicitGrid: opts.explicitTableGrids,
-            });
+            // "pixels": the grids are read off the rendered page.
+            if (pixels) raster = PageRaster.render(page, ocrDpi).deskewed();
+            tabs = raster
+              ? tablesFromGrids(td.blocks, findPixelGrids(raster))
+              : findTables(td.blocks, paths, clip, {
+                  strategy: strategy as TableStrategy,
+                  edges,
+                  explicitGrid: opts.explicitTableGrids,
+                });
             tabs.forEach((t, i) => {
               const r = Rect.from(t.bbox).union(t.header.bbox);
               tab_rects.set(i, r);

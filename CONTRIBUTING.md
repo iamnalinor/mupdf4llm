@@ -26,6 +26,17 @@ bun run lint:check     # CI-style — fails on style drift instead of fixing it
 bun run build          # emits dist/{index,llama}.{js,cjs,d.ts}
 ```
 
+The `scan-*.pdf` fixtures are real scans in the public domain, taken from
+the Internet Archive and stored as grey JPEG pages:
+`scan-us-census-1900.pdf` — Twelfth Census of the United States (1900),
+identifier `b32182661_0003` (Public Domain Mark); `scan-ru-census-1918.pdf`
+and `scan-ru-prose-1918.pdf` — «Всероссийская промышленная и
+профессиональная перепись 1918 года», ЦСУ, 1920, identifier
+`vserossijskajapromyshlennajaiprofessiona91` (a state publication without
+personal authors, over 100 years old). Only add scans whose public-domain
+status is clear. `tests/helpers/degrade.ts` makes worse copies of them
+(skew, noise, specks, low resolution) for the robustness tests.
+
 OCR tests use a fake engine. To also run the real RapidOCR test (downloads
 ~13 MB of models on first run):
 

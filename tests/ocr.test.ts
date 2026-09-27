@@ -6,6 +6,7 @@ import { PageRaster } from "../src/helpers/ocr/engine";
 import { looksBroken } from "../src/helpers/ocr/cellText";
 import { OcrSetupError } from "../src/helpers/ocr/rapidOcr";
 import { detectRulings } from "../src/helpers/tables/pixelGrid";
+import { degrade, type Degradation } from "./helpers/degrade";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(`tests/fixtures/${name}`));
 
@@ -77,7 +78,7 @@ test("PageRaster.crop drops empty cells and trims ruling lines", () => {
   const r = new PageRaster(data, W, H, 1);
   expect(r.crop(new Rect(10, 10, 100, 90))).toBeNull();
   for (let y = 40; y < 60; y++) for (let x = 40; x < 50; x++) data[y * W + x] = 0;
-  const img = r.crop(new Rect(10, 10, 100, 90))!;
+  const img = new PageRaster(data, W, H, 1).crop(new Rect(10, 10, 100, 90))!;
   expect(img).not.toBeNull();
   // No row of the crop is a leftover rule.
   for (let y = 0; y < img.height; y++) {
@@ -255,4 +256,147 @@ const hasRapidOcr = (() => {
       await toMarkdown(fixture("pdflatex-outline.pdf")),
     );
   },
+);
+
+// ---------------------------------------------------------------------------
+// Real scans (public domain): tables ruled by column only, show-through,
+// tinted paper. Structure is checked with a fake engine; values with the
+// real one (MUPDF4LLM_OCR_IT=1).
+// ---------------------------------------------------------------------------
+
+/** [rows, columns] of each table found with `tableStrategy: "pixels"`. */
+async function scanShapes(name: string): Promise<number[][]> {
+  const pages = await toMarkdownPages(fixture(name), {
+    tableStrategy: "pixels",
+    ocr: fakeEngine(),
+  });
+  return pages.flatMap((p) => p.tables.map((t) => [t.rows, t.columns]));
+}
+
+describe("pixels strategy on real scans", () => {
+  test("US census 1900: two tables, a row per 1900/1890 line, group headers", async () => {
+    expect(await scanShapes("scan-us-census-1900.pdf")).toEqual([
+      [22, 10],
+      [14, 7],
+    ]);
+  });
+
+  test("Russian census 1918: dense rows, values on the last line of an entry", async () => {
+    // Header, entries 7-24, total.
+    expect(await scanShapes("scan-ru-census-1918.pdf")).toEqual([[20, 6]]);
+  });
+
+  test("a page of prose (with show-through) has no table", async () => {
+    expect(await scanShapes("scan-ru-prose-1918.pdf")).toEqual([]);
+  });
+
+  // Worse copies of the same pages. The body rows and the columns must not
+  // change; the header may gain a row when one more short header rule shows.
+  const variants: [string, Degradation][] = [
+    ["askew 1°", { deg: 1 }],
+    ["askew -1.5°", { deg: -1.5 }],
+    ["specks, 150 dpi, JPEG q40", { speck: 0.004, dpi: 150, q: 40 }],
+  ];
+  for (const [name, d] of variants) {
+    test(`degraded scans: ${name}`, async () => {
+      for (const [file, expected] of [
+        [
+          "scan-us-census-1900.pdf",
+          [
+            [22, 10],
+            [14, 7],
+          ],
+        ],
+        ["scan-ru-census-1918.pdf", [[20, 6]]],
+      ] as const) {
+        const pages = await toMarkdownPages(degrade(fixture(file), d), {
+          tableStrategy: "pixels",
+          ocr: fakeEngine(),
+        });
+        const shapes = pages.flatMap((p) => p.tables.map((t) => [t.rows, t.columns]));
+        expect(shapes.map((s) => s[1])).toEqual(expected.map((e) => e[1]));
+        shapes.forEach((s, i) => {
+          expect(s[0]).toBeGreaterThanOrEqual(expected[i]![0]);
+          expect(s[0]).toBeLessThanOrEqual(expected[i]![0] + 1);
+        });
+      }
+    }, 60_000);
+  }
+
+  test("group header labels become merged cells", async () => {
+    const [page] = await toMarkdownPages(fixture("scan-us-census-1900.pdf"), {
+      tableStrategy: "pixels",
+      ocr: fakeEngine(),
+    });
+    const header = page!.tables[0]!.cells[0]!;
+    // "AGGREGATE." / "MALES." / "FEMALES." each span three columns.
+    expect(header.map((c) => (c === null ? "-" : "x")).join("")).toBe("xx--x--x--");
+  });
+});
+
+testOcr(
+  "RapidOCR reads the real scans",
+  async () => {
+    const ocr = await createRapidOcr();
+    try {
+      const us = rows(
+        await toMarkdown(fixture("scan-us-census-1900.pdf"), { tableStrategy: "pixels", ocr }),
+      );
+      expect(us).toContainEqual([
+        expect.stringMatching(/New York.*1900/),
+        "23.7",
+        "25.3",
+        "20.4",
+        "27.2",
+        "29.5",
+        "22.3",
+        "20.3",
+        "21.0",
+        "18.6",
+      ]);
+      expect(us).toContainEqual([
+        expect.stringMatching(/^1890/),
+        "24.0",
+        "28.8",
+        "16.2",
+        "26.3",
+        "32.1",
+        "17.2",
+        "21.7",
+        "25.6",
+        "15.2",
+      ]);
+      expect(us).toContainEqual([
+        expect.stringMatching(/Russia and Poland/),
+        "9.8",
+        "9.8",
+        "9.6",
+        "9.4",
+        "11.1",
+        "10.8",
+      ]);
+      const ru = rows(
+        await toMarkdown(fixture("scan-ru-census-1918.pdf"), { tableStrategy: "pixels", ocr }),
+      );
+      expect(ru).toContainEqual([
+        "24",
+        expect.stringMatching(/Транспорт/),
+        "23951",
+        "5293,10",
+        "479",
+        "112,6",
+      ]);
+      expect(ru).toContainEqual([
+        "",
+        expect.stringMatching(/Итого/),
+        "1252468",
+        "1882966,64",
+        "185",
+        "233,2",
+      ]);
+    } finally {
+      await ocr.dispose?.();
+    }
+  },
+  300_000,
 );

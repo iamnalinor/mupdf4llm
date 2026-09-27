@@ -17,9 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `tableStrategy: "pixels"` finds ruled tables on the rendered page
-  (`ocrDpi`, default 300), so tables in scans without a text layer or
-  vector graphics are detected. It implies `textSource: "ocr"`.
+- `tableStrategy: "pixels"` reads tables off the rendered page (`ocrDpi`,
+  default 300), so tables in scans without a text layer or vector graphics
+  are detected. It implies `textSource: "ocr"`. Built for printed tables
+  that rule columns but not rows: columns come from the vertical rules,
+  rows from the text lines (wrapped labels join their data line), group
+  header labels become merged cells. Scans are deskewed (up to 3°),
+  binarised against the local paper tone and despeckled; broken thin rules
+  are joined. Tested on public-domain census scans (US 1900, Russia 1918).
 - `textSource: "pdf" | "ocr" | "auto"` chooses where table cell text comes
   from, independently of how the table was found. `"ocr"` recognises every
   cell (for a broken text layer under a good vector grid); `"auto"` OCRs
@@ -28,17 +33,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   calls never run OCR.
 - Pluggable OCR: `ocr?: OcrEngine` accepts any object with
   `recognize(image) => Promise<string>`. The default engine is RapidOCR
-  (PP-OCRv5 `eslav` model, ru/uk/be/en, via the optional peer
+  (PP-OCRv5 `cyrillic` model, Cyrillic and Latin, via the optional peer
   dependencies `ppu-paddle-ocr` + `onnxruntime-node`), loaded only when a
-  cell needs OCR. `createRapidOcr({ model })` creates a reusable engine;
+  cell needs OCR. A multi-line cell is recognised line by line when the
+  whole-cell result misses lines; leader dots are removed. `createRapidOcr({ model })` creates a reusable engine;
   a missing package or model rejects with `OcrSetupError`.
   OCR runs per table cell, not per page.
 - `PageChunk.tables[].cells` holds each cell's plain text and its source
   (`"pdf"`, `"ocr"` or `"failed"`). An OCR error or empty result for a
   cell with ink marks the cell `"failed"` and leaves it empty; the
   conversion continues.
-- Guide page "OCR for tables", fixtures `scanned-grid.pdf` and
-  `broken-text-grid.pdf`.
+- Guide page "OCR for tables" with measured accuracy on degraded scans;
+  fixtures `scanned-grid.pdf`, `broken-text-grid.pdf` and three real
+  public-domain scans (`scan-*.pdf`).
 
 ### Fixed
 

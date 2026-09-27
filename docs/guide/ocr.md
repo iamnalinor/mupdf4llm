@@ -16,16 +16,48 @@ they are independent:
 const md = await toMarkdown(buf, { tableStrategy: "pixels" });
 ```
 
-The page is rendered at `ocrDpi` (default 300) and ruling lines are
-found in the pixels, so it works when the page is one scanned image with
-no text and no vector graphics. `"pixels"` implies `textSource: "ocr"`:
-every cell is cropped from the rendered page and recognised on its own.
-Recognising cell by cell is much more accurate than OCR of a whole page
-and then fitting the text into the grid.
+The page is rendered at `ocrDpi` (default 300) and the table is read off
+the pixels, so it works when the page is one scanned image with no text
+and no vector graphics. `"pixels"` implies `textSource: "ocr"`: every cell
+is cropped from the rendered page and recognised on its own, which is much
+more accurate than OCR of the whole page fitted into the grid afterwards.
 
-Only ruled tables are detected (borderless scanned tables are not yet
-supported). Slight skew (about 1°) is tolerated; the page is not
-deskewed.
+What it handles, as found in real printed tables:
+
+- **Columns ruled, rows not.** Most printed tables rule the columns and
+  the header only. Columns come from the vertical rules, and body rows
+  from the text lines between them. A wrapped label (ink in one column
+  only) joins the data line next to it; when values sit on the last line
+  of an entry and the row number on the first, the number line starts the
+  row.
+- **Headers with group labels** ("MALES." over Total / Cities / Rural)
+  become merged cells.
+- **Scan defects:** tinted or grey paper and a shadow at the binding
+  (the ink threshold follows the local background), specks and noise
+  (dropped before OCR), show-through from the back of the page, broken
+  thin rules, and pages fed askew up to 3° (the page is deskewed first).
+- **Leader dots** ("Total ........ 1900") are removed from cell text.
+
+Not handled yet: tables without any vertical rules (borderless), text
+set vertically in the header (it is recognised as noise or skipped).
+
+### Accuracy
+
+Numeric cells read correctly on a public-domain census page (US 1900,
+245 values), with the default engine:
+
+| Scan                          | Correct |
+| ----------------------------- | ------- |
+| original, 200 dpi             | 99.6%   |
+| fed askew 1°                  | 98.4%   |
+| fed askew −1.5°               | 87.8%   |
+| grey noise (σ 15)             | 90.2%   |
+| black specks (0.4% of pixels) | 85.7%   |
+| 150 dpi, JPEG quality 40      | 82.4%   |
+
+The table structure (rows and columns) stays exact in all of these.
+Heavy noise (σ 25) and resolutions below about 120 dpi also break the
+structure. Aim for 200–300 dpi scans.
 
 ## Broken text layer: `textSource`
 
@@ -66,8 +98,8 @@ Nothing is loaded unless a cell actually needs OCR. If the packages are
 missing, the call rejects with the install command above. Models (about
 13 MB) are downloaded and cached on first use.
 
-The default model is `v5-eslav-mobile` (Russian, Ukrainian, Belarusian
-and English). Pick another one, or reuse one loaded engine across many
+The default model is `v5-cyrillic-mobile` (Cyrillic and Latin script:
+Russian, English and more). Pick another one, or reuse one loaded engine across many
 documents, with `createRapidOcr`:
 
 ```ts
@@ -82,7 +114,7 @@ try {
 ```
 
 `model` takes any `ppu-paddle-ocr` preset name (`"v5-en-mobile"`,
-`"v5-cyrillic-mobile"`, `"v6-small"`, …) or explicit
+`"v5-eslav-mobile"`, `"v6-small"`, …) or explicit
 `{ detection, recognition, charactersDictionary }` files.
 
 ## Your own engine
@@ -106,8 +138,11 @@ await toMarkdown(buf, { tableStrategy: "pixels", ocr });
 
 The image is one table cell: 8-bit grayscale (`img.data`, `img.width`,
 `img.height`) with a white margin, also available as PNG (`img.png()`).
-Return the text with lines separated by `\n`. Engines you pass in are
-never disposed by the library.
+Return the text with lines separated by `\n`. A multi-line cell whose
+result has fewer lines than the cell shows is recognised again line by
+line (a text detector may drop a short last line), so an engine can be
+called more than once per cell. Engines you pass in are never disposed by
+the library.
 
 ## Which cells came from OCR
 
@@ -130,9 +165,10 @@ engine.
 
 ## Performance
 
-OCR is much slower than reading the text layer: every non-empty cell is
-one model run (roughly 50–100 ms on a laptop CPU), plus about a second
-to load the models once per `toMarkdown` call when the default engine is
-used. Pass a shared engine (above) when converting many documents. This
-cost only applies when `"pixels"`, `"ocr"` or `"auto"` is requested;
-the default path is unchanged.
+OCR is much slower than reading the text layer. Each non-empty cell is
+one or a few model runs; the US census page above (two tables, about 300
+cells) takes about 8 seconds on one CPU core, plus about a second to load
+the models once per `toMarkdown` call when the default engine is used.
+Pass a shared engine (above) when converting many documents. This cost
+only applies when `"pixels"`, `"ocr"` or `"auto"` is requested; the
+default path is unchanged.

@@ -9,10 +9,11 @@ export interface RapidOcrModel {
 
 export interface RapidOcrOptions {
   /**
-   * Recognition model. A `ppu-paddle-ocr` preset name (`"v5-eslav-mobile"`,
+   * Recognition model. A `ppu-paddle-ocr` preset name (`"v5-cyrillic-mobile"`,
    * `"v5-en-mobile"`, `"v5-latin-mobile"`, `"v6-small"`, …) or explicit model
-   * files. Default `"v5-eslav-mobile"`: PP-OCRv5 for Russian, Ukrainian,
-   * Belarusian and English.
+   * files. Default `"v5-cyrillic-mobile"`: PP-OCRv5 for Cyrillic and Latin
+   * text; on the test scans it read Russian and English better than the
+   * `eslav` and `latin` models.
    */
   model?: string | RapidOcrModel;
 }
@@ -44,7 +45,7 @@ export async function createRapidOcr(opts: RapidOcrOptions = {}): Promise<OcrEng
       { cause: e },
     );
   }
-  const name = opts.model ?? "v5-eslav-mobile";
+  const name = opts.model ?? "v5-cyrillic-mobile";
   const model = typeof name === "string" ? lib.MODEL_PRESETS?.[name] : name;
   if (!model) throw new OcrSetupError(`Unknown ppu-paddle-ocr model preset: ${String(name)}`);
   const service = new lib.PaddleOcrService({ model });
