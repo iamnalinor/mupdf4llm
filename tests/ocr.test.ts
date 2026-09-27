@@ -442,6 +442,35 @@ async function scanShapes(name: string): Promise<number[][]> {
   return pages.flatMap((p) => p.tables.map((t) => [t.rows, t.columns]));
 }
 
+describe("pixels: a label row across all columns", () => {
+  const label = "Section B: placeholder heading across columns";
+  const labelRow = (tables: { cells: ({ text: string } | null)[][] }[]) =>
+    tables[0]!.cells.find((r) => r.some((c) => c?.text.includes("Section")))!;
+
+  test("on a vector page it is one merged cell", async () => {
+    const [page] = await toMarkdownPages(fixture("merged-row-grid.pdf"), {
+      tableStrategy: "pixels",
+      textSource: "pdf",
+    });
+    const row = labelRow(page!.tables);
+    expect(row[0]!.text).toBe(label);
+    expect(row.slice(1).every((c) => c === null)).toBe(true);
+    expect(page!.text).toContain(`|${label}|`);
+  });
+
+  test("on a scan it is one merged cell", async () => {
+    const [page] = await toMarkdownPages(degrade(fixture("merged-row-grid.pdf"), {}), {
+      tableStrategy: "pixels",
+      ocr: fakeEngine(),
+    });
+    // Header, four rows, then the label.
+    const row = page!.tables[0]!.cells[5]!;
+    expect(row[0]).not.toBeNull();
+    expect(page!.tables[0]!.columns).toBe(5);
+    expect(row.slice(1).every((c) => c === null)).toBe(true);
+  }, 60_000);
+});
+
 describe("scans turned a quarter without /Rotate", () => {
   const shapes = async (buf: Uint8Array, opts: MarkdownOptions = {}) => {
     const pages = await toMarkdownPages(buf, {

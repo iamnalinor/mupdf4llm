@@ -553,6 +553,46 @@ function footnoteMarksGrid() {
   console.log(`wrote ${OUT}/footnote-marks-grid.pdf`);
 }
 
+/**
+ * A table whose rows are all ruled, with a section label on a row of its
+ * own that spans the whole width: the column rules stop above and below it.
+ * The label row is barely taller than the text, so the rules on either side
+ * nearly meet across it.
+ */
+function mergedRowGrid() {
+  const cols = [50, 90, 200, 330, 450, 545];
+  const header = ["No", "Name", "Region", "Group", "Points"];
+  const body = (n: number) => [
+    String(n),
+    `Person ${n}`,
+    ["North", "South"][n % 2]!,
+    "A",
+    String(90 - n),
+  ];
+  type Row = { h: number; cells?: string[]; label?: string };
+  const rows: Row[] = [{ h: 18, cells: header }];
+  for (let n = 1; n <= 4; n++) rows.push({ h: 18, cells: body(n) });
+  rows.push({ h: 12, label: "Section B: placeholder heading across columns" });
+  for (let n = 5; n <= 8; n++) rows.push({ h: 18, cells: body(n) });
+
+  let c = "0 G 0.8 w\n";
+  let y = 780;
+  const x0 = cols[0]!;
+  const x1 = cols.at(-1)!;
+  c += `${x0} ${y} m ${x1} ${y} l S\n`;
+  for (const row of rows) {
+    const y1 = y - row.h;
+    c += `${x0} ${y1} m ${x1} ${y1} l S\n`;
+    c += `${x0} ${y} m ${x0} ${y1} l S ${x1} ${y} m ${x1} ${y1} l S\n`;
+    if (row.cells) {
+      for (const x of cols.slice(1, -1)) c += `${x} ${y} m ${x} ${y1} l S\n`;
+      row.cells.forEach((v, k) => (c += text(cols[k]! + 4, y1 + 5, v)));
+    } else c += text(210, y1 + 3, row.label!, 8);
+    y = y1;
+  }
+  save("merged-row-grid.pdf", [{ content: c }]);
+}
+
 const all: Record<string, () => void> = {
   compoundStrokeGrid,
   compoundFillGrid,
@@ -566,6 +606,7 @@ const all: Record<string, () => void> = {
   brokenTextGrid,
   type3NoUnicodeGrid,
   footnoteMarksGrid,
+  mergedRowGrid,
 };
 const only = process.argv.slice(2);
 for (const [name, make] of Object.entries(all)) if (!only.length || only.includes(name)) make();
