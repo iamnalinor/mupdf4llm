@@ -39,7 +39,10 @@ text lines and table rows make the ink change sharply from one pixel row
 to the next and only smoothly along them, so the direction the lines run
 in shows. A page whose lines run vertically is turned a quarter before
 its tables are read, the same way `removeRotation` bakes a `/Rotate`.
-Pages with a text layer are never turned.
+Which quarter — clockwise or back — the ink cannot tell; when the cells
+are going to be OCR'd anyway (`textSource` other than `"pdf"`), a few of
+the longest lines are recognised both ways up and the page is turned so
+that they read as words. Pages with a text layer are never turned.
 
 ```ts
 await toMarkdown(buf, { tableStrategy: "pixels" }); // detectOrientation: true by default

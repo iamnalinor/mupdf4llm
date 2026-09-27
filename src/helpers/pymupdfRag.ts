@@ -13,7 +13,7 @@ import { PageRaster } from "./ocr/engine";
 import { createRapidOcr, lazyEngine } from "./ocr/rapidOcr";
 import { ocrTableCells } from "./ocr/cellText";
 import { removeRotation } from "./layout/pageRotation";
-import { applyQuarterTurn, scanTurn } from "./layout/scanOrientation";
+import { applyQuarterTurn, scanTurn, upsideDown } from "./layout/scanOrientation";
 import { ProgressBar } from "./progress";
 import { renderPageImage, dedupeImages } from "./images/imageExtract";
 import { extractWords } from "./text/extractWords";
@@ -442,8 +442,13 @@ async function convert(
     // A scan fed sideways, with no /Rotate to set it right: turn it before
     // the grid is read off its pixels.
     if (detectTables && strategy === "pixels" && opts.detectOrientation !== false) {
-      const turn = scanTurn(page);
-      if (turn) page = applyQuarterTurn(doc, pno, turn);
+      if (scanTurn(page)) {
+        page = applyQuarterTurn(doc, pno, 90);
+        // A quarter turn either way looks the same to the ink; the text
+        // tells which way is up, when it is going to be read anyway.
+        if (textSource !== "pdf" && (await upsideDown(PageRaster.render(page, 150), ocr)))
+          page = applyQuarterTurn(doc, pno, 180);
+      }
     }
     {
       const rectBounds = page.getBounds();

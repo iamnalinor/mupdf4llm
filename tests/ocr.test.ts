@@ -7,7 +7,7 @@ import { PageRaster, grayImage } from "../src/helpers/ocr/engine";
 import { disposable } from "../src/helpers/ocr/rapidOcr";
 import { looksBroken } from "../src/helpers/ocr/cellText";
 import { detectRulings, rowBreaks } from "../src/helpers/tables/pixelGrid";
-import { inkAxis } from "../src/helpers/layout/scanOrientation";
+import { inkAxis, textPlausibility, upsideDown } from "../src/helpers/layout/scanOrientation";
 import { degrade, type Degradation } from "./helpers/degrade";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(`tests/fixtures/${name}`));
@@ -467,6 +467,64 @@ describe("scans turned a quarter without /Rotate", () => {
     expect(found.map((t) => t[1])).toEqual([10, 7]);
   }, 60_000);
 
+  test("textPlausibility prefers words to scattered marks", () => {
+    for (const good of ["Total population 1900", "Всего по губернии", "12,50"])
+      for (const bad of ["006I uoᴉʇɐlndod", "' .: ,l ı", ""])
+        expect(textPlausibility(good)).toBeGreaterThan(textPlausibility(bad));
+  });
+
+  // Lines of "glyphs" heavy at the top, like capitals and ascenders; the
+  // fake engine reads a crop only when its heavy side is up.
+  const glyphPage = (flip: boolean) => {
+    const w = 800;
+    const h = 500;
+    const data = new Uint8Array(w * h).fill(255);
+    for (let line = 0; line < 6; line++) {
+      for (let g = 0; g < 40; g++) {
+        const x0 = 40 + g * 18;
+        const y0 = 40 + line * 70;
+        for (let y = 0; y < 16; y++)
+          for (let x = 0; x < 10; x++) if (y < 5 || x < 3) data[(y0 + y) * w + x0 + x] = 0;
+      }
+    }
+    if (flip) data.reverse();
+    return new PageRaster(data, w, h, 1);
+  };
+  const heavyTopReader = (): OcrEngine => ({
+    async recognize(img) {
+      let top = 0;
+      let bottom = 0;
+      for (let y = 0; y < img.height; y++)
+        for (let x = 0; x < img.width; x++)
+          if (img.data[y * img.width + x]! < 128) y < img.height / 2 ? top++ : bottom++;
+      return top > bottom ? "word word word" : "' , . ı";
+    },
+  });
+
+  test("upsideDown follows the engine", async () => {
+    expect(await upsideDown(glyphPage(false), heavyTopReader())).toBe(false);
+    expect(await upsideDown(glyphPage(true), heavyTopReader())).toBe(true);
+  });
+
+  test("upsideDown keeps the page when the engine reads both ways alike", async () => {
+    expect(
+      await upsideDown(
+        glyphPage(true),
+        fakeEngine(() => "same text"),
+      ),
+    ).toBe(false);
+  });
+
+  test("with the PDF text layer as source no OCR runs to find the turn", async () => {
+    const ocr = fakeEngine();
+    await toMarkdown(degrade(fixture("scan-ru-census-1918.pdf"), { quarter: 90 }), {
+      tableStrategy: "pixels",
+      textSource: "pdf",
+      ocr,
+    });
+    expect(ocr.calls.length).toBe(0);
+  }, 60_000);
+
   test("upright scans are not turned", async () => {
     for (const name of [
       "scan-ru-census-1918.pdf",
@@ -495,6 +553,27 @@ describe("scans turned a quarter without /Rotate", () => {
     }
   }, 60_000);
 });
+
+testOcr(
+  "RapidOCR finds which way is up on a census page turned either way",
+  async () => {
+    const ocr = await createRapidOcr();
+    try {
+      const cells = async (buf: Uint8Array) =>
+        rows(await toMarkdown(buf, { tableStrategy: "pixels", ocr })).flat();
+      const upright = await cells(degrade(fixture("scan-ru-census-1918.pdf"), {}));
+      for (const quarter of [90, 270] as const) {
+        // Read upside down, hardly a cell would match.
+        const turned = await cells(degrade(fixture("scan-ru-census-1918.pdf"), { quarter }));
+        const same = turned.filter((v, i) => v.trim() && v === upright[i]).length;
+        expect(same).toBeGreaterThanOrEqual(0.6 * upright.filter((v) => v.trim()).length);
+      }
+    } finally {
+      await ocr.dispose?.();
+    }
+  },
+  600_000,
+);
 
 describe("pixels strategy on real scans", () => {
   test("US census 1900: two tables, a row per 1900/1890 line, group headers", async () => {
