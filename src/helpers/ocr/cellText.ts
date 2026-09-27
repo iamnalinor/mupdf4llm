@@ -1,5 +1,5 @@
 import { Rect } from "../geometry";
-import type { TableData, TextSource } from "../types";
+import type { Block, TableData, TextSource } from "../types";
 import type { OcrEngine, OcrImage, PageRaster } from "./engine";
 import { OcrSetupError } from "./rapidOcr";
 
@@ -64,23 +64,76 @@ export function looksBroken(text: string): boolean {
 }
 
 /**
+ * Fonts whose text cannot be trusted: a font with broken characters (see
+ * {@link looksBroken}) in some of its text. A font embedded without a
+ * ToUnicode map and with glyphs numbered in order of use yields control
+ * characters for its first glyphs and printable ASCII gibberish for the
+ * rest, which on its own passes for text.
+ */
+export function brokenFonts(blocks: Block[]): Set<string> {
+  const count = new Map<string, number>();
+  for (const b of blocks) {
+    if (b.type !== 0) continue;
+    for (const l of b.lines) {
+      for (const s of l.spans) {
+        for (const ch of s.chars) {
+          if (!BROKEN_CHAR.test(ch.c)) continue;
+          const f = fontKey(s.font, ch.fontId);
+          count.set(f, (count.get(f) ?? 0) + 1);
+        }
+      }
+    }
+  }
+  return new Set([...count].filter(([, n]) => n >= 2).map(([f]) => f));
+}
+
+const fontKey = (name: string, id?: number) => (id === undefined ? name : `${name}#${id}`);
+
+/** Fonts of the characters whose center lies in `cell`. */
+function fontsIn(blocks: Block[], cell: Rect): Set<string> {
+  const out = new Set<string>();
+  for (const b of blocks) {
+    if (b.type !== 0) continue;
+    for (const l of b.lines) {
+      for (const s of l.spans) {
+        for (const ch of s.chars) {
+          const cx = (ch.bbox[0] + ch.bbox[2]) / 2;
+          const cy = (ch.bbox[1] + ch.bbox[3]) / 2;
+          if (cx >= cell.x0 && cx < cell.x1 && cy >= cell.y0 && cy < cell.y1)
+            out.add(fontKey(s.font, ch.fontId));
+        }
+      }
+    }
+  }
+  return out;
+}
+
+export interface OcrCellsOptions {
+  /** The page's text blocks: under `"auto"`, text in a {@link brokenFonts} font is OCRed too. */
+  blocks?: Block[];
+  /** On an {@link OcrSetupError}, keep the text layer instead of raising it. */
+  keepLayer?: boolean;
+}
+
+/**
  * Fill table cells from OCR according to `source`. `"ocr"` recognises every
- * cell; `"auto"` only cells whose text layer {@link looksBroken}. A cell
- * without ink is empty and not sent to the engine. When the engine throws or
- * returns nothing for a cell with ink, the cell is left empty with source
- * `"failed"` and processing continues. An {@link OcrSetupError} is raised,
- * unless `keepLayer` is set: then the text layer stays as it is.
+ * cell; `"auto"` only cells whose text layer {@link looksBroken} or is set in
+ * one of the {@link brokenFonts}. A cell without ink is empty and not sent to
+ * the engine. When the engine throws or returns nothing for a cell with ink,
+ * the cell is left empty with source `"failed"` and processing continues. An
+ * {@link OcrSetupError} is raised, unless `keepLayer` is set: then the text
+ * layer stays as it is.
  */
 export async function ocrTableCells(
   tables: TableData[],
   source: TextSource,
   raster: PageRaster,
   engine: OcrEngine,
-  keepLayer = false,
+  { blocks = [], keepLayer = false }: OcrCellsOptions = {},
 ): Promise<void> {
   if (source === "pdf") return;
   try {
-    await ocrCells(tables, source, raster, engine);
+    await ocrCells(tables, source, raster, engine, blocks);
   } catch (e) {
     if (!(keepLayer && e instanceof OcrSetupError)) throw e;
     if (typeof process !== "undefined" && process.env?.DEBUG_MUPDF4LLM)
@@ -93,14 +146,22 @@ async function ocrCells(
   source: TextSource,
   raster: PageRaster,
   engine: OcrEngine,
+  blocks: Block[],
 ): Promise<void> {
+  const badFonts = source === "auto" ? brokenFonts(blocks) : new Set<string>();
+  const trusted = (text: string, cell: Rect) => {
+    if (looksBroken(text)) return false;
+    if (!badFonts.size) return true;
+    for (const f of fontsIn(blocks, cell)) if (badFonts.has(f)) return false;
+    return true;
+  };
   for (const tab of tables) {
     const texts = source === "auto" ? tab.cellTexts() : null;
     for (let r = 0; r < tab.row_count; r++) {
       for (let c = 0; c < tab.col_count; c++) {
         const cell = tab.cells[r]?.[c];
         if (!cell) continue;
-        if (texts && !looksBroken(texts[r]![c]!.text)) continue;
+        if (texts && trusted(texts[r]![c]!.text, Rect.from(cell))) continue;
         const whole = raster.crop(Rect.from(cell));
         if (!whole) {
           // Nothing to read. Under "auto" the (empty) text layer stands.

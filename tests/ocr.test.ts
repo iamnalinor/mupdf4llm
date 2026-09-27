@@ -345,6 +345,26 @@ describe("textSource on a vector grid with a broken text layer", () => {
   });
 });
 
+describe("auto with a font whose codes are broken", () => {
+  test("every cell set in that font is OCRed, even the ones that look printable", async () => {
+    const ocr = fakeEngine();
+    const [page] = await toMarkdownPages(fixture("type3-no-tounicode-grid.pdf"), {
+      textSource: "auto",
+      ocr,
+    });
+    const [broken, fine] = page!.tables;
+    expect(broken!.cells.flat().every((c) => c?.source === "ocr")).toBe(true);
+    expect(fine!.cells.flat().every((c) => c?.source === "pdf")).toBe(true);
+    expect(fine!.cells[1]!.map((c) => c!.text)).toEqual([
+      "1",
+      "Quartz Jumping Fox",
+      "Alpha",
+      "12,50",
+    ]);
+    expect(ocr.calls.length).toBe(20);
+  });
+});
+
 // Real RapidOCR (ppu-paddle-ocr + onnxruntime-node); downloads models on first run.
 const testOcr = process.env.MUPDF4LLM_OCR_IT ? test : test.skip;
 

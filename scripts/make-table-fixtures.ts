@@ -448,6 +448,79 @@ function brokenTextGrid() {
   console.log(`wrote ${OUT}/broken-text-grid.pdf`);
 }
 
+/**
+ * Two tables on one page. The first is set in a Type3 font without a
+ * ToUnicode map whose glyphs are numbered in order of first use (1, 2, 3,
+ * ...), as some PDF printers embed fonts: the text layer holds the glyph
+ * numbers. The heading above the table uses up the first 31 glyphs, which
+ * come out as control characters; every cell of the table is printable
+ * ASCII gibberish. The second table is in Helvetica and reads fine.
+ */
+function type3NoUnicodeGrid() {
+  const doc = new mupdf.PDFDocument();
+  const good = doc.addSimpleFont(new mupdf.Font("Helvetica"));
+  const rows = [
+    ["Code", "Placeholder name", "Group", "Points"],
+    ["1", "Quartz Jumping Fox", "Alpha", "12,50"],
+    ["2", "Brisk Violet Wyvern", "Delta", "87,25"],
+    ["3", "Hazy Mellow Kite", "Sigma", "40,75"],
+    ["4", "Oblique Pixel Dune", "Omega", "63,00"],
+  ];
+  const heading = "#$%&*+-/:;<=>?@[]^_{|}~!EILNRTUXYZ";
+  // Glyph numbers by first use; each glyph is drawn as a plain bar.
+  const codes = new Map<string, number>();
+  for (const ch of heading + rows.flat().join(""))
+    if (!codes.has(ch)) codes.set(ch, codes.size + 1);
+  const procs = doc.newDictionary();
+  const diffs = doc.newArray();
+  diffs.push(doc.newInteger(1));
+  for (const [ch, n] of codes) {
+    const h = ch === " " ? 0 : /[a-z]/.test(ch) ? 500 : 700;
+    const draw = h ? `60 0 440 ${h} re f` : "";
+    procs.put(String(n), doc.addStream(`600 0 0 0 600 ${h || 1} d1 ${draw}`, {}));
+    diffs.push(doc.newName(String(n)));
+  }
+  const n = codes.size;
+  const encoding = doc.newDictionary();
+  encoding.put("Type", doc.newName("Encoding"));
+  encoding.put("Differences", diffs);
+  const t3 = doc.addObject({
+    Type: doc.newName("Font"),
+    Subtype: doc.newName("Type3"),
+    FontBBox: [0, 0, 600, 700],
+    FontMatrix: [0.001, 0, 0, 0.001, 0, 0],
+    CharProcs: procs,
+    Encoding: encoding,
+    FirstChar: 1,
+    LastChar: n,
+    Widths: Array.from({ length: n }, () => 600),
+    Resources: doc.newDictionary(),
+  });
+  const hex = (s: string) =>
+    [...s].map((ch) => codes.get(ch)!.toString(16).padStart(2, "0")).join("");
+  const cols = [60, 110, 300, 400, 520];
+  const ROW = 24;
+  const table = (top: number, font: string) => {
+    let c = "0 G 1 w\n";
+    for (let r = 0; r <= rows.length; r++)
+      c += `${cols[0]} ${top - r * ROW} m ${cols.at(-1)} ${top - r * ROW} l S\n`;
+    for (const x of cols) c += `${x} ${top} m ${x} ${top - rows.length * ROW} l S\n`;
+    rows.forEach((row, r) =>
+      row.forEach((v, k) => {
+        const s = font === "F2" ? `<${hex(v)}>` : `(${v})`;
+        c += `BT /${font} 11 Tf ${cols[k]! + 6} ${top - r * ROW - 16} Td ${s} Tj ET\n`;
+      }),
+    );
+    return c;
+  };
+  const resources = doc.addObject({ Font: { F1: good, F2: t3 } });
+  const content =
+    `BT /F2 11 Tf 60 790 Td <${hex(heading)}> Tj ET\n` + table(760, "F2") + table(560, "F1");
+  doc.insertPage(-1, doc.addPage([0, 0, W, H], 0, resources, content));
+  writeFileSync(`${OUT}/type3-no-tounicode-grid.pdf`, doc.saveToBuffer("compress").asUint8Array());
+  console.log(`wrote ${OUT}/type3-no-tounicode-grid.pdf`);
+}
+
 const all: Record<string, () => void> = {
   compoundStrokeGrid,
   compoundFillGrid,
@@ -459,6 +532,7 @@ const all: Record<string, () => void> = {
   splitLineRows,
   scannedGrid,
   brokenTextGrid,
+  type3NoUnicodeGrid,
 };
 const only = process.argv.slice(2);
 for (const [name, make] of Object.entries(all)) if (!only.length || only.includes(name)) make();

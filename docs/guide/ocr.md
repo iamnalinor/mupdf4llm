@@ -82,7 +82,10 @@ await toMarkdown(buf, { textSource: "ocr" }); // grid from lines_strict, text fr
   characters, a letter of another script slipped into a word (a Latin
   "c" in "Иcтория" reads right but breaks search; whole pieces like
   "ITотдел" are fine), or text of 4+ characters that
-  is mostly neither letters nor digits. A wrong encoding that still produces letters (Latin
+  is mostly neither letters nor digits. When some text of a font has
+  such characters, every cell set in that font is OCR'd: a font embedded
+  without a `ToUnicode` map often yields control characters for its first
+  glyphs and printable gibberish (`DE=BA`) for the rest. A wrong encoding that still produces letters (Latin
   gibberish instead of Cyrillic) is **not** detected — use `"ocr"` for
   such documents.
 

@@ -5,6 +5,11 @@ import type { OcrEngine } from "./ocr/engine";
 export interface CharBBox {
   c: string;
   bbox: BBox;
+  /**
+   * The font instance on the page. Two embedded fonts can share a name (a
+   * good and a broken copy of Helvetica); this tells them apart.
+   */
+  fontId?: number;
 }
 
 export interface Span {

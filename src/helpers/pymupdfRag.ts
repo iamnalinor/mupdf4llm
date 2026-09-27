@@ -516,7 +516,7 @@ async function convert(
         // The default "auto" only repairs the text layer: without an OCR
         // engine it keeps that layer. A page without one has nothing to keep.
         const keepLayer = opts.textSource === undefined && hasTextLayer(td.blocks);
-        await ocrTableCells(tabs, textSource, raster, ocr, keepLayer);
+        await ocrTableCells(tabs, textSource, raster, ocr, { blocks: td.blocks, keepLayer });
       }
 
       const parms: PageParams = {
