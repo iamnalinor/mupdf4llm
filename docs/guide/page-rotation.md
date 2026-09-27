@@ -29,6 +29,23 @@ rotation worsens extraction):
 await toMarkdown(buf, { removeRotation: false });
 ```
 
+## Scans turned without `/Rotate`
+
+A sheet fed into the scanner sideways often comes out as a page with no
+`/Rotate` at all: the image itself lies on its side, and a table read off
+its pixels would have its rows and columns swapped. With
+`tableStrategy: "pixels"`, a page without a text layer is checked first:
+text lines and table rows make the ink change sharply from one pixel row
+to the next and only smoothly along them, so the direction the lines run
+in shows. A page whose lines run vertically is turned a quarter before
+its tables are read, the same way `removeRotation` bakes a `/Rotate`.
+Pages with a text layer are never turned.
+
+```ts
+await toMarkdown(buf, { tableStrategy: "pixels" }); // detectOrientation: true by default
+await toMarkdown(buf, { tableStrategy: "pixels", detectOrientation: false });
+```
+
 ## Manual control
 
 Three helpers are exported for advanced use:

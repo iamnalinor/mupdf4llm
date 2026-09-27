@@ -13,6 +13,7 @@ import { PageRaster } from "./ocr/engine";
 import { createRapidOcr, lazyEngine } from "./ocr/rapidOcr";
 import { ocrTableCells } from "./ocr/cellText";
 import { removeRotation } from "./layout/pageRotation";
+import { applyQuarterTurn, scanTurn } from "./layout/scanOrientation";
 import { ProgressBar } from "./progress";
 import { renderPageImage, dedupeImages } from "./images/imageExtract";
 import { extractWords } from "./text/extractWords";
@@ -438,6 +439,12 @@ async function convert(
     // remove_rotation bakes a derotation matrix into the content stream and
     // remaps the page boxes; reload so getBounds() reflects the new page box.
     if (prevRotation !== 0) page = doc.loadPage(pno) as mupdf.PDFPage;
+    // A scan fed sideways, with no /Rotate to set it right: turn it before
+    // the grid is read off its pixels.
+    if (detectTables && strategy === "pixels" && opts.detectOrientation !== false) {
+      const turn = scanTurn(page);
+      if (turn) page = applyQuarterTurn(doc, pno, turn);
+    }
     {
       const rectBounds = page.getBounds();
       const pageRect = new Rect(rectBounds[0], rectBounds[1], rectBounds[2], rectBounds[3]);

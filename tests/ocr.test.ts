@@ -2,11 +2,12 @@ import { test, expect, describe } from "bun:test";
 import { readFileSync } from "node:fs";
 import * as mupdf from "mupdf";
 import { toMarkdown, toMarkdownPages, createRapidOcr, OcrSetupError, Rect } from "../src/index";
-import type { OcrEngine, OcrImage } from "../src/index";
+import type { MarkdownOptions, OcrEngine, OcrImage } from "../src/index";
 import { PageRaster, grayImage } from "../src/helpers/ocr/engine";
 import { disposable } from "../src/helpers/ocr/rapidOcr";
 import { looksBroken } from "../src/helpers/ocr/cellText";
 import { detectRulings, rowBreaks } from "../src/helpers/tables/pixelGrid";
+import { inkAxis } from "../src/helpers/layout/scanOrientation";
 import { degrade, type Degradation } from "./helpers/degrade";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(`tests/fixtures/${name}`));
@@ -427,6 +428,73 @@ async function scanShapes(name: string): Promise<number[][]> {
   });
   return pages.flatMap((p) => p.tables.map((t) => [t.rows, t.columns]));
 }
+
+describe("scans turned a quarter without /Rotate", () => {
+  const shapes = async (buf: Uint8Array, opts: MarkdownOptions = {}) => {
+    const pages = await toMarkdownPages(buf, {
+      tableStrategy: "pixels",
+      textSource: "pdf",
+      ...opts,
+    });
+    return pages.flatMap((p) => p.tables.map((t) => [t.rows, t.columns]));
+  };
+  const raster = (buf: Uint8Array) =>
+    PageRaster.render(mupdf.Document.openDocument(buf, "application/pdf").loadPage(0), 100);
+
+  test("inkAxis tells upright pages from pages turned sideways", () => {
+    for (const name of [
+      "scan-ru-census-1918.pdf",
+      "scan-ru-prose-1918.pdf",
+      "scan-us-census-1900.pdf",
+    ]) {
+      expect(inkAxis(raster(degrade(fixture(name), {})))).toBe("upright");
+      expect(inkAxis(raster(degrade(fixture(name), { quarter: 90 })))).toBe("sideways");
+      expect(inkAxis(raster(degrade(fixture(name), { quarter: 270 })))).toBe("sideways");
+    }
+  }, 60_000);
+
+  for (const quarter of [90, 270] as const) {
+    test(`census 1918 turned ${quarter}° keeps its 6 columns`, async () => {
+      const [t] = await shapes(degrade(fixture("scan-ru-census-1918.pdf"), { quarter }));
+      expect(t![1]).toBe(6);
+      expect(t![0]).toBeGreaterThanOrEqual(20);
+      expect(t![0]).toBeLessThanOrEqual(21);
+    }, 60_000);
+  }
+
+  test("US census 1900 turned 90° keeps its columns", async () => {
+    const found = await shapes(degrade(fixture("scan-us-census-1900.pdf"), { quarter: 90 }));
+    expect(found.map((t) => t[1])).toEqual([10, 7]);
+  }, 60_000);
+
+  test("upright scans are not turned", async () => {
+    for (const name of [
+      "scan-ru-census-1918.pdf",
+      "scan-ru-prose-1918.pdf",
+      "scan-us-census-1900.pdf",
+    ]) {
+      const on = await toMarkdown(fixture(name), { tableStrategy: "pixels", ocr: fakeEngine() });
+      const off = await toMarkdown(fixture(name), {
+        tableStrategy: "pixels",
+        ocr: fakeEngine(),
+        detectOrientation: false,
+      });
+      expect(on).toBe(off);
+    }
+  }, 120_000);
+
+  test("pages with a text layer are never turned", async () => {
+    for (const name of ["rotated-cropbox-table.pdf", "multicolumn.pdf"]) {
+      const on = await toMarkdown(fixture(name), { tableStrategy: "pixels", ocr: fakeEngine() });
+      const off = await toMarkdown(fixture(name), {
+        tableStrategy: "pixels",
+        ocr: fakeEngine(),
+        detectOrientation: false,
+      });
+      expect(on).toBe(off);
+    }
+  }, 60_000);
+});
 
 describe("pixels strategy on real scans", () => {
   test("US census 1900: two tables, a row per 1900/1890 line, group headers", async () => {

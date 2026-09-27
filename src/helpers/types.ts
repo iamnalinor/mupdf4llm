@@ -165,6 +165,12 @@ export interface MarkdownOptions {
    * is loaded on first use. Any object with `recognize(image)` works.
    */
   ocr?: OcrEngine;
+  /**
+   * With `tableStrategy: "pixels"`, turn a page without a text layer whose
+   * lines run vertically (a sheet scanned sideways, /Rotate not set) before
+   * its tables are read. Default `true`.
+   */
+  detectOrientation?: boolean;
   /** Resolution the page is rendered at for `"pixels"` and OCR. Default 300. */
   ocrDpi?: number;
   /** Explicit grid coordinates for `tableStrategy: "explicit"`. */

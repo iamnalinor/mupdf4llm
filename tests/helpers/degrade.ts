@@ -11,6 +11,11 @@ export interface Degradation {
   dpi?: number;
   /** JPEG quality of the re-scan. Default 70. */
   q?: number;
+  /**
+   * The sheet turned clockwise by a quarter turn or more (fed sideways or
+   * upside down), with no /Rotate on the page to set it right.
+   */
+  quarter?: 90 | 180 | 270;
 }
 
 /**
@@ -52,11 +57,34 @@ export function degrade(buf: Uint8Array, o: Degradation): Uint8Array {
       dst[y * out.getStride() + x] = Math.max(0, Math.min(255, v));
     }
   }
+  const turned = o.quarter ? turn(out, o.quarter) : out;
   const doc = new mupdf.PDFDocument();
-  const img = doc.addImage(new mupdf.Image(out.asJPEG(o.q ?? 70)));
-  const W = bx1 - bx0;
-  const H = by1 - by0;
+  const img = doc.addImage(new mupdf.Image(turned.asJPEG(o.q ?? 70)));
+  const sideways = o.quarter === 90 || o.quarter === 270;
+  const W = sideways ? by1 - by0 : bx1 - bx0;
+  const H = sideways ? bx1 - bx0 : by1 - by0;
   const res = doc.addObject({ XObject: { Im0: img } });
   doc.insertPage(-1, doc.addPage([0, 0, W, H], 0, res, `q ${W} 0 0 ${H} 0 0 cm /Im0 Do Q\n`));
   return doc.saveToBuffer("compress").asUint8Array().slice();
+}
+
+/** A grey pixmap turned clockwise by `deg`. */
+function turn(pm: mupdf.Pixmap, deg: 90 | 180 | 270): mupdf.Pixmap {
+  const w = pm.getWidth();
+  const h = pm.getHeight();
+  const stride = pm.getStride();
+  const src = pm.getPixels().slice();
+  const [tw, th] = deg === 180 ? [w, h] : [h, w];
+  const out = new mupdf.Pixmap(mupdf.ColorSpace.DeviceGray, [0, 0, tw, th], false);
+  const dst = out.getPixels();
+  const ts = out.getStride();
+  for (let y = 0; y < th; y++) {
+    for (let x = 0; x < tw; x++) {
+      // Source pixel of the turned pixel (x, y).
+      const [sx, sy] =
+        deg === 90 ? [y, h - 1 - x] : deg === 180 ? [w - 1 - x, h - 1 - y] : [w - 1 - y, x];
+      dst[y * ts + x] = src[sy * stride + sx]!;
+    }
+  }
+  return out;
 }
