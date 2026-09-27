@@ -2,6 +2,7 @@ import { test, expect } from "bun:test";
 import { readFileSync } from "node:fs";
 import * as mupdf from "mupdf";
 import { Rect } from "../src/helpers/geometry";
+import type { BBox } from "../src/helpers/geometry";
 import {
   clusterStripes,
   computeReadingOrder,
@@ -339,13 +340,11 @@ test("tables: white rules on shading, header-only column rules, rounded border",
 // Text strategy
 // ---------------------------------------------------------------------------
 
-function textTableRowsByPage(name: string): string[][][] {
+function textTableRows(name: string): string[][] {
   const buf = new Uint8Array(readFileSync(`tests/fixtures/${name}`));
   const pages = toMarkdownPages(buf, { tableStrategy: "text", elements: ["table"] });
-  return pages.map((p) => tableRows(p.text));
+  return pages.flatMap((p) => tableRows(p.text));
 }
-
-const textTableRows = (name: string) => textTableRowsByPage(name).flat();
 
 test("tables: text strategy, each cell of a row is its own text line", () => {
   expect(textTableRows("split-line-rows.pdf")).toEqual([
@@ -506,11 +505,14 @@ test("tables: text strategy ignores an overprinted (fake bold) header copy", () 
 });
 
 test("tables: text strategy keeps a header that reaches into the first row", () => {
-  // "No", "Name" and "Total" are taller than the T1..T3 row they touch, and
-  // a group label spans the T1/T2 columns.
-  const [rows] = textTableRowsByPage("merged-cells-grid.pdf");
-  expect(rows![0]).toEqual(["No", "Name", "Results per task T1 T2", "", "T3", "Total"]);
-  expect(rows![1]).toEqual(["1", "Member 1", "1", "4", "6", "11"]);
+  // "No", "Name" and "Total" are taller than the T1..T3 row they touch; the
+  // group label above T1..T3 spans columns and stays outside the table.
+  const buf = new Uint8Array(readFileSync("tests/fixtures/merged-cells-grid.pdf"));
+  const [page] = toMarkdownPages(buf, { tableStrategy: "text" });
+  const rows = tableRows(page!.text);
+  expect(rows[0]).toEqual(["No", "Name", "T1", "T2", "T3", "Total"]);
+  expect(page!.text).toContain("Results per task");
+  expect(rows[1]).toEqual(["1", "Member 1", "1", "4", "6", "11"]);
 });
 
 test("tables: markdown escaping of | and trailing backslashes in cells", () => {
@@ -528,4 +530,46 @@ test("tables: markdown escaping of | and trailing backslashes in cells", () => {
     },
   )[0]!.to_markdown();
   expect(md).toContain("|C:\\dir\\\\|a\\|b|x\\\\\\|y|");
+});
+
+test("tables: text strategy keeps a column that only a totals row crosses", () => {
+  const cols = [0, 100, 150, 220];
+  const lines = [
+    ["Item", "Qty", "Price", "Sum"],
+    ["Apple", "2", "1.00", "2.00"],
+    ["Pear", "3", "2.00", "6.00"],
+  ].map((values, r) => {
+    const spans = values.map((v, c) => textLine(v, cols[c]!, r * 12).spans[0]!);
+    return { bbox: [0, r * 12, 240, r * 12 + 8] as BBox, dir: [1, 0], wmode: 0, spans } as Line;
+  });
+  const total = textLine("Grand total incl. tax", 0, 36);
+  total.spans.push(textLine("13.00", 220, 36).spans[0]!);
+  const blocks: Block[] = [{ type: 0, bbox: [0, 0, 250, 44], lines: [...lines, total] }];
+  const [rows] = textTables(blocks);
+  expect(rows!.slice(0, 3)).toEqual([
+    ["Item", "Qty", "Price", "Sum"],
+    ["Apple", "2", "1.00", "2.00"],
+    ["Pear", "3", "2.00", "6.00"],
+  ]);
+});
+
+test("tables: text strategy leaves a paragraph touching a table outside it", () => {
+  const rows = [
+    ["Alice", "10", "North", "91"],
+    ["Bob", "11", "South", "82"],
+    ["Carol", "9", "West", "73"],
+  ];
+  // Paragraph lines 8pt apart, the last one reaching 1pt into the first row.
+  const para = [0, 1, 2].map((i) => {
+    const line = textLine("Paragraph text that runs across the page width " + i, 0, -23 + i * 8);
+    return { type: 0 as const, bbox: line.bbox, lines: [line] };
+  });
+  const tables = findTables(
+    [...para, ...cellBlocks(rows, (c) => [0, 100, 150, 220][c]!)],
+    [],
+    new Rect(-100, -100, 1000, 1000),
+    { strategy: "text" },
+  );
+  expect(tables.map((t) => tableRows(t.to_markdown()))).toEqual([rows]);
+  expect(tables[0]!.bbox[1]).toBeGreaterThanOrEqual(1);
 });

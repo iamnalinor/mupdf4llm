@@ -16,12 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before column alignment is checked; previously only a single line with a
   span per cell counted as a row. Rows assembled from separate lines need
   three columns and three rows, and columns of running text are rejected.
-- `text` table strategy: a column start that falls inside a word of another
-  row (right-aligned or centred cells) no longer splits the column.
+- `text` table strategy: right-aligned and centred cells no longer split
+  their column. A column start is ignored when the first row or two rows
+  have a word across it; a single wide row (a totals line) does not remove
+  a column.
 - `text` table strategy: a header above the table body whose labels wrap
   over several lines becomes the header row and defines the column
-  boundaries. Text reaching into the first row from above is kept in the
-  table, and a label spanning several columns merges those header cells.
+  boundaries. A label taller than the first row that it touches stays in
+  the table; wider text touching the table (a paragraph, a group label)
+  stays above it.
 - `text` table strategy: a row boundary lies just above the next row, which
   removes the empty rows emitted for the gaps between text lines and keeps
   the wrapped continuation of a cell in its row.

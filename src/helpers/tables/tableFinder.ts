@@ -604,10 +604,15 @@ function textRows(blocks: Block[], clip: Rect): { rows: TextRow[]; lines: Rect[]
   const vOverlap = (a: Rect, b: Rect) =>
     Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) >= Math.min(a.height, b.height) / 2;
   const hOverlap = (a: Rect, b: Rect) => Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0);
-  const groups: { rect: Rect; members: (typeof lines)[number][] }[] = [];
+  type Group = { rect: Rect; members: (typeof lines)[number][] };
+  const groups: Group[] = [];
+  // Lines come sorted by y0: only groups reaching below this line's top can
+  // take it, so older ones drop out of the search.
+  let active: Group[] = [];
   for (const l of lines) {
     const r = l.rect;
-    const dup = groups.some((g) =>
+    active = active.filter((g) => g.rect.y1 > r.y0);
+    const dup = active.some((g) =>
       g.members.some(
         (m) =>
           Math.abs(m.rect.y0 - r.y0) <= 1 &&
@@ -616,14 +621,16 @@ function textRows(blocks: Block[], clip: Rect): { rows: TextRow[]; lines: Rect[]
       ),
     );
     if (dup) continue;
-    const group = groups.find(
+    const group = active.find(
       (g) => vOverlap(g.rect, r) && g.members.every((m) => hOverlap(m.rect, r) <= TOL),
     );
     if (group) {
       group.rect = group.rect.union(r);
       group.members.push(l);
     } else {
-      groups.push({ rect: r, members: [l] });
+      const g = { rect: r, members: [l] };
+      groups.push(g);
+      active.push(g);
     }
   }
 
@@ -819,26 +826,36 @@ function findTablesByText(blocks: Block[], clip: Rect): TableData[] {
     let left = Math.min(...group.map((r) => r.rect.x0));
     let right = Math.max(...group.map((r) => r.rect.x1));
     let top = group[0]!.rect.y0;
+    // Words of the body rows (not of text above or below that touches them).
     const words = wordBoxes(blocks, new Rect(left, top, right, group[group.length - 1]!.rect.y1));
-    let cols = uniqueSorted(group.flatMap((r) => r.xs)).filter((x) => !straddles(words, x));
+    const rowWords = group.map((r) =>
+      words.filter((w) => r.rect.contains([(w[0] + w[2]) / 2, (w[1] + w[3]) / 2])),
+    );
+    // A start inside a word of another row comes from a right-aligned or
+    // centred cell. Drop it when the first row (usually the labels) or two
+    // rows cross it; a single wide row (a totals line) crossing a real
+    // column start keeps the column.
+    let cols = uniqueSorted(group.flatMap((r) => r.xs)).filter((x) => {
+      const starts = group.filter((r) => r.xs.some((rx) => Math.abs(rx - x) <= TOL)).length;
+      const crossed = rowWords.filter((ws) => straddles(ws, x)).length;
+      return crossed < Math.min(2, starts) && !straddles(rowWords[0]!, x);
+    });
     if (cols.length < 2) continue;
     const rowYs: number[] = [];
 
     const header = headerAbove(lines, group);
-    const bounds = header.cols.length >= 2 ? headerBoundaries(header.cols, words) : [];
-    // Accept a header with at least as many columns as the body when most of
-    // its columns receive body text.
-    const filled = header.cols.filter((_, i) => {
-      const lo = i ? bounds[i - 1]! : -Infinity;
-      const hi = bounds[i] ?? Infinity;
-      return group.some((r) =>
-        r.boxes.some((b) => (b.x0 + b.x1) / 2 >= lo && (b.x0 + b.x1) / 2 < hi),
-      );
-    }).length;
+    const bounds = header.cols.length >= 2 ? headerBoundaries(header.cols, rowWords.flat()) : [];
+    // Accept the header when most of its columns receive body text and the
+    // body's column starts fall into distinct header columns (a caption or
+    // a short label above would gather several body columns into one).
+    const column = (x: number) => bounds.filter((b) => b <= x + TOL).length;
+    const filled = new Set(group.flatMap((r) => r.boxes.map((b) => column((b.x0 + b.x1) / 2))));
+    const distinct = new Set(cols.map(column)).size;
     const accept =
-      header.cols.length >= Math.max(2, cols.length) &&
-      filled >= 2 &&
-      filled * 2 >= header.cols.length;
+      header.cols.length >= 2 &&
+      filled.size >= 2 &&
+      filled.size * 2 >= header.cols.length &&
+      distinct >= cols.length * 0.75;
     if (accept) {
       left = Math.min(left, header.cols[0]!.x0);
       right = Math.max(right, ...header.cols.map((c) => c.x1));
@@ -846,23 +863,30 @@ function findTablesByText(blocks: Block[], clip: Rect): TableData[] {
       top = Math.min(...header.lines.map((l) => l.y0));
       rowYs.push(top, (Math.max(...header.lines.map((l) => l.y1)) + group[0]!.rect.y0) / 2);
     } else {
-      // Text reaching into the first row from above (a label taller than
-      // the row) joins that row instead of being cut by the table's edge.
-      const firstY0 = group[0]!.rect.y0;
-      const taken = new Set<Rect>();
-      for (let grown = true; grown; ) {
-        grown = false;
-        for (const l of lines) {
-          if (taken.has(l) || l.y0 >= firstY0 || l.y1 <= top) continue;
-          if (l.x1 <= left || l.x0 >= right) continue;
-          taken.add(l);
-          top = Math.min(top, l.y0);
-          left = Math.min(left, l.x0);
-          right = Math.max(right, l.x1);
-          grown = true;
-        }
+      // Text reaching into the first row from above: a label that fits in
+      // one column (taller than the row) joins it; anything wider stays
+      // outside, and the table starts below it.
+      const first = group[0]!.rect;
+      const edges = [...cols, Infinity];
+      const oneColumn = (l: Rect) =>
+        edges.some(
+          (x, i) => i + 1 < edges.length && l.x0 >= x - TOL && l.x1 <= edges[i + 1]! + TOL,
+        );
+      const body = new Set(group.flatMap((r) => r.lines));
+      const touching = lines.filter(
+        (l) => !body.has(l) && l.y0 < first.y0 && l.y1 > first.y0 && l.x1 > left && l.x0 < right,
+      );
+      const labels = touching.filter(oneColumn);
+      for (const l of labels) {
+        top = Math.min(top, l.y0);
+        right = Math.max(right, l.x1);
       }
-      cols = [left, ...cols.filter((x) => x > left + TOL)];
+      // Anything else the table's top edge would cut stays above it.
+      const labelSet = new Set(labels);
+      for (const l of lines) {
+        if (body.has(l) || labelSet.has(l) || l.x1 <= left || l.x0 >= right) continue;
+        if (l.y0 < top && l.y1 > top && l.y1 < first.y0 + first.height / 2) top = l.y1 + 0.01;
+      }
       rowYs.push(top);
     }
     // A row boundary sits just above the next row (between the rows when
@@ -878,16 +902,7 @@ function findTablesByText(blocks: Block[], clip: Rect): TableData[] {
     const allCols = [...cols, right + 1];
     const bbox = new Rect(allCols[0]!, top, right + 1, bottom);
     const hRecs = rowYs.map((y) => ({ y, x0: bbox.x0, x1: bbox.x1 }));
-    // A label in the first row that crosses a column boundary (a group
-    // label over several columns) opens that boundary so the cells merge.
-    const firstRow = wordBoxes(blocks, new Rect(bbox.x0, top, bbox.x1, rowYs[1]!)).filter(
-      (w) => (w[1] + w[3]) / 2 < rowYs[1]!,
-    );
-    const vRecs = allCols.map((x) => ({
-      x,
-      y0: straddles(firstRow, x) ? rowYs[1]! : bbox.y0,
-      y1: bbox.y1,
-    }));
+    const vRecs = allCols.map((x) => ({ x, y0: bbox.y0, y1: bbox.y1 }));
     const t = new Table(blocks, { bbox, hLines: hRecs, vLines: vRecs });
     if (t.row_count >= 2 && t.col_count >= 2) out.push(t);
   }
