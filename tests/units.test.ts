@@ -15,6 +15,8 @@ import { getKeyValues } from "../src/helpers/forms/formFields";
 import { toMarkdown, toMarkdownPages } from "../src/index";
 import type { MarkdownElement } from "../src/index";
 import { PDFMarkdownReader } from "../src/llama/pdfMarkdownReader";
+import { findTables } from "../src/helpers/tables/tableFinder";
+import type { Block, Line, Span } from "../src/helpers/types";
 
 function openFixture(name: string): mupdf.PDFDocument {
   return mupdf.PDFDocument.openDocument(
@@ -243,7 +245,7 @@ function tableRows(md: string): string[][] {
   return md
     .split("\n")
     .filter((l) => l.startsWith("|") && !/^\|(---\|)+$/.test(l))
-    .map((l) => l.slice(1, -1).split("|"));
+    .map((l) => l.slice(1, -1).split(/(?<!\\)\|/));
 }
 
 test("tables: grid stroked as one compound path, continued over two pages", () => {
@@ -331,4 +333,87 @@ test("tables: white rules on shading, header-only column rules, rounded border",
   for (const [i, first] of ["Shaded", "Header", "Rounded"].entries()) {
     expect(tableRows(pages[i]!)).toEqual([[first, "Label", "Value"], ...body]);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Text strategy
+// ---------------------------------------------------------------------------
+
+function textTableRows(name: string): string[][] {
+  const buf = new Uint8Array(readFileSync(`tests/fixtures/${name}`));
+  const pages = toMarkdownPages(buf, { tableStrategy: "text", elements: ["table"] });
+  return pages.flatMap((p) => tableRows(p.text));
+}
+
+test("tables: text strategy, each cell of a row is its own text line", () => {
+  expect(textTableRows("split-line-rows.pdf")).toEqual([
+    [
+      "Name",
+      "Grade",
+      "Team name",
+      "Round one, points in Physics",
+      "Round one, points in Biology",
+      "Team round, points",
+      "Total",
+    ],
+    ["Alice Brown", "11", "North \\| Blue", "22,5", "24,0", "88,5", "62,40"],
+    ["Bob Green", "11", "North \\| Blue", "26,5", "10,0", "88,5", "60,40"],
+    ["Carol White", "10", "Tasters", "19,5", "14,0", "86,5", "58,60"],
+    ["David Black", "9", "Tasters", "8,0", "21,5", "86,5", "55,15"],
+    ["Eve Grey", "11", "Blenders", "17,0", "6,5", "71,0", "49,90"],
+  ]);
+});
+
+test("tables: text strategy, centred cells under a one-line header, no false tables in prose", () => {
+  // Pages 1-2 are two-column prose, page 3 holds a ruleless table.
+  expect(textTableRows("multicolumn.pdf")).toEqual([
+    ["Country", "Population (millions)", "Area (km2)", "Capital", "Official Language"],
+    ["Austria", "8.9", "83,879", "Vienna", "German"],
+    ["Belgium", "11.5", "30,689", "Brussels", "Dutch, French, German"],
+    ["Czech Republic", "10.7", "78,866", "Prague", "Czech"],
+    ["Denmark", "5.8", "42,951", "Copenhagen", "Danish"],
+    ["Finland", "5.5", "338,424", "Helsinki", "Finnish, Swedish"],
+  ]);
+});
+
+/** A one-span text line with 5pt-wide glyphs. */
+function textLine(text: string, x: number, y: number): Line {
+  const chars = [...text].map((c, i) => ({
+    c,
+    bbox: [x + i * 5, y, x + (i + 1) * 5, y + 8] as [number, number, number, number],
+  }));
+  const span = {
+    bbox: new Rect(x, y, x + text.length * 5, y + 8),
+    text,
+    font: "Test",
+    size: 8,
+    color: 0,
+    flags: 0,
+    char_flags: 0,
+    alpha: 255,
+    ascender: 1,
+    descender: 0,
+    origin: [x, y + 8],
+    chars,
+  } as Span;
+  return { bbox: [x, y, x + text.length * 5, y + 8], dir: [1, 0], wmode: 0, spans: [span] };
+}
+
+test("tables: text strategy, every cell in its own block", () => {
+  const cols = [0, 100, 150, 220];
+  const rows = [
+    ["Name", "Grade", "Team", "Score"],
+    ["Alice", "10", "North", "91"],
+    ["Bob", "11", "South", "82"],
+    ["Carol", "9", "West", "73"],
+  ];
+  const blocks: Block[] = rows.flatMap((values, r) =>
+    values.map((v, c) => {
+      const line = textLine(v, cols[c]!, r * 12);
+      return { type: 0 as const, bbox: line.bbox, lines: [line] };
+    }),
+  );
+  const [table, ...rest] = findTables(blocks, [], new Rect(0, 0, 300, 100), { strategy: "text" });
+  expect(rest).toEqual([]);
+  expect(tableRows(table!.to_markdown())).toEqual(rows);
 });

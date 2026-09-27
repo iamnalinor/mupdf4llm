@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-27
+
+### Fixed
+
+- `text` table strategy: tables whose rows are stored as one text line (or
+  one block) per cell are detected. Lines are grouped into visual rows
+  before column alignment is checked; previously only a single line with a
+  span per cell counted as a row.
+- `text` table strategy: a header directly above the table body, including
+  labels wrapped over several lines, becomes the header row and defines the
+  column boundaries, so right-aligned and centred cells no longer split or
+  shift into neighbouring columns. Row boundaries lie between rows, which
+  removes the empty rows emitted for the gaps between text lines.
+- A `|` inside a table cell is escaped as `\|` instead of starting a new
+  markdown column.
+
 ## [0.2.1] - 2026-09-27
 
 ### Fixed
@@ -246,7 +262,8 @@ docs/                           VitePress + TypeDoc documentation site
 requirements.txt`. Tests `skipIf` Python or `pymupdf4llm` is
   missing so JS-only contributors can run `bun test` cleanly.
 
-[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/iamnalinor/mupdf4llm/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/iamnalinor/mupdf4llm/releases/tag/v0.1.2

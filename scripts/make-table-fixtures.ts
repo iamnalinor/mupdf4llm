@@ -3,7 +3,7 @@
  * reproduces one way PDF producers encode a table grid that the "lines"
  * strategy used to miss. Content is neutral placeholder text.
  *
- *   bun scripts/make-table-fixtures.ts
+ *   bun scripts/make-table-fixtures.ts [generatorName ...]
  */
 import { writeFileSync } from "node:fs";
 import * as mupdf from "mupdf";
@@ -313,10 +313,73 @@ function ruleVariants() {
   save("rule-variants.pdf", [{ content: a }, { content: b }, { content: c }]);
 }
 
-compoundStrokeGrid();
-compoundFillGrid();
-mergedCellsGrid();
-tallGlyphCells();
-whiteCellBackgrounds();
-rotatedCropBox();
-ruleVariants();
+/** Helvetica advance widths (1/1000 em) of digits, separators and space. */
+const NUM_WIDTH: Record<string, number> = { ",": 278, ".": 278, " ": 278 };
+const numWidth = (s: string, size: number) =>
+  [...s].reduce((w, ch) => w + (NUM_WIDTH[ch] ?? 556), 0) * (size / 1000);
+
+/**
+ * A ruleless table whose text layer splits every visual row into several
+ * parallel lines: each row is drawn as one BT..ET with every cell placed by
+ * its own text matrix, so MuPDF reports one line per cell (not one line with
+ * one span per cell). The header cells wrap over up to three lines and are
+ * bottom-aligned, numbers are right-aligned, "grade team" is one text run
+ * crossing a column boundary, and a title sits above the table.
+ */
+function splitLineRows() {
+  const SIZE = 7;
+  const top = 780;
+  const cols = [52, 179, 228, 300, 350, 400, 450];
+  const header = [
+    ["Name"],
+    ["Grade"],
+    ["Team name"],
+    ["Round one,", "points in", "Physics"],
+    ["Round one,", "points in", "Biology"],
+    ["Team", "round,", "points"],
+    ["Total"],
+  ];
+  const data: [string, string, string, string, string, string][] = [
+    ["Alice Brown", "11 North | Blue", "22,5", "24,0", "88,5", "62,40"],
+    ["Bob Green", "11 North | Blue", "26,5", "10,0", "88,5", "60,40"],
+    ["Carol White", "10 Tasters", "19,5", "14,0", "86,5", "58,60"],
+    ["David Black", "9 Tasters", "8,0", "21,5", "86,5", "55,15"],
+    ["Eve Grey", "11 Blenders", "17,0", "6,5", "71,0", "49,90"],
+  ];
+  const tm = (x: number, y: number) => `1 0 0 1 ${f(x)} ${f(y)} Tm`;
+  let c = text(52, top, "Final results of the spring round", 9);
+  // Header: one BT per column, lines bottom-aligned on the same baseline.
+  const hBase = top - 40;
+  header.forEach((lines, k) => {
+    c += `BT /F1 ${SIZE} Tf `;
+    lines.forEach(
+      (s, i) => (c += `${tm(cols[k]!, hBase + (lines.length - 1 - i) * 7)} (${s}) Tj `),
+    );
+    c += "ET\n";
+  });
+  // Body: one BT per row, one Tm per cell. Numbers end 2pt before the next column.
+  const ends = [...cols.slice(4), 500];
+  data.forEach((row, r) => {
+    const y = hBase - 12 - r * 12;
+    // "grade team" is one run; the team name starts at its column.
+    const grade = row[1].split(" ")[0]! + " ";
+    const gx = cols[2]! - numWidth(grade, SIZE);
+    c += `BT /F1 ${SIZE} Tf ${tm(cols[0]!, y)} (${row[0]}) Tj ${tm(gx, y)} (${row[1]}) Tj `;
+    row.slice(2).forEach((v, i) => (c += `${tm(ends[i]! - 2 - numWidth(v, SIZE), y)} (${v}) Tj `));
+    c += "ET\n";
+  });
+  save("split-line-rows.pdf", [{ content: c }]);
+}
+
+const all: Record<string, () => void> = {
+  compoundStrokeGrid,
+  compoundFillGrid,
+  mergedCellsGrid,
+  tallGlyphCells,
+  whiteCellBackgrounds,
+  rotatedCropBox,
+  ruleVariants,
+  splitLineRows,
+};
+const only = process.argv.slice(2);
+for (const [name, make] of Object.entries(all)) if (!only.length || only.includes(name)) make();

@@ -25,9 +25,14 @@ toMarkdown(buf, { tableStrategy: "lines" });
 
 ## `text`
 
-**No rules required.** Detects tables purely from text alignment:
-clusters x-coordinates of span starts across adjacent lines, treats a
-contiguous run of lines sharing ≥2 column positions as a table.
+**No rules required.** Detects tables purely from text alignment. Text
+lines are first grouped into visual rows, so it does not matter whether
+the PDF stores a row as one line with a span per cell or as one line (or
+block) per cell. A contiguous run of rows sharing ≥2 column starts is a
+table body. A header directly above the body — labels may wrap over
+several lines — defines the columns, so right-aligned or centred cells
+stay in their column; the boundary between two labels is placed where no
+body word crosses it.
 
 Lightweight port — for tables with no rules it produces a usable grid
 but the column boundaries are heuristic and may not byte-match PyMuPDF.
