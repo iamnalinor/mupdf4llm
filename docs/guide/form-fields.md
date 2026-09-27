@@ -43,7 +43,7 @@ LLM use cases you want forms as structured JSON, not rendered into the
 prose. If you do want them inlined, do it yourself:
 
 ```ts
-let md = toMarkdown(buf);
+let md = await toMarkdown(buf);
 for (const f of getKeyValues(doc)) {
   md += `\n- **${f.name}**: ${f.value}\n`;
 }

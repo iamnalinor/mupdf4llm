@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-27
+
+### Changed (breaking)
+
+- ESM only: the CommonJS build (`dist/*.cjs`, the `require` export
+  condition) is removed. It could not be loaded anyway — `mupdf` uses
+  top-level await, which `require()` rejects. From CommonJS use
+  `await import("@nalinor/mupdf4llm")`.
+
+- `toMarkdown` and `toMarkdownPages` are async and return a `Promise`:
+  write `await toMarkdown(buf)`. The markdown for the same options is
+  unchanged; `PageChunk.tables[]` gains a `cells` field (additive).
+  `PDFMarkdownReader.loadData` was already async.
+
+### Added
+
+- `tableStrategy: "pixels"` reads tables off the rendered page (`ocrDpi`,
+  default 300), so tables in scans without a text layer or vector graphics
+  are detected. It implies `textSource: "ocr"`. Built for printed tables
+  that rule columns but not rows: columns come from the vertical rules,
+  rows from the text lines (wrapped labels join their data line), group
+  header labels become merged cells. Scans are deskewed (up to 3°),
+  binarised against the local paper tone and despeckled; broken thin rules
+  are joined. Tested on public-domain census scans (US 1900, Russia 1918).
+- `textSource: "pdf" | "ocr" | "auto"` chooses where table cell text comes
+  from, independently of how the table was found. `"ocr"` recognises every
+  cell (for a broken text layer under a good vector grid); `"auto"` OCRs
+  only cells whose text is empty or contains replacement / private-use /
+  control characters, a letter of another script slipped into a word
+  ("Иcтория" with a Latin c), or mostly symbols. Default `"pdf"`, so existing
+  calls never run OCR.
+- Pluggable OCR: `ocr?: OcrEngine` accepts any object with
+  `recognize(image) => Promise<string>`. The default engine is RapidOCR
+  (PP-OCRv5 `cyrillic` model, Cyrillic and Latin, via the optional peer
+  dependencies `ppu-paddle-ocr` + `onnxruntime-node`), loaded only when a
+  cell needs OCR. A multi-line cell is recognised line by line when the
+  whole-cell result misses lines; leader dots are removed. `createRapidOcr({ model })` creates a reusable engine
+  (disposable with `await using`; its type uses `AsyncDisposable`, which
+  needs TypeScript ≥ 5.2 with the `esnext.disposable` lib unless
+  `skipLibCheck` is on);
+  a missing package or model rejects with `OcrSetupError` (exported),
+  which custom engines throw for fatal setup problems too.
+  OCR runs per table cell, not per page.
+- `PageChunk.tables[].cells` holds each cell's plain text and its source
+  (`"pdf"`, `"ocr"` or `"failed"`). An OCR error or empty result for a
+  cell with ink marks the cell `"failed"` and leaves it empty; the
+  conversion continues.
+- Guide page "OCR for tables" with measured accuracy on degraded scans;
+  fixtures `scanned-grid.pdf`, `broken-text-grid.pdf` and three real
+  public-domain scans (`scan-*.pdf`).
+
 ### Fixed
 
 - `text` table strategy: tables whose rows are stored as one text line (or
@@ -269,7 +320,8 @@ docs/                           VitePress + TypeDoc documentation site
 requirements.txt`. Tests `skipIf` Python or `pymupdf4llm` is
   missing so JS-only contributors can run `bun test` cleanly.
 
-[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/iamnalinor/mupdf4llm/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/iamnalinor/mupdf4llm/releases/tag/v0.1.2

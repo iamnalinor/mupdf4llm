@@ -22,7 +22,7 @@ features:
   - title: Pure JS, no native build
     details: Runs on Node 20+ and Bun out of the box. The only runtime dependency is the official `mupdf` WASM package from Artifex.
   - title: Headers, tables, images, forms
-    details: Font-size or TOC-driven headers, four table strategies, image extraction or base64 embedding, AcroForm field dump, per-word coordinates — all via the same `toMarkdown()` entry point.
+    details: Font-size or TOC-driven headers, five table strategies (including OCR of scanned tables), image extraction or base64 embedding, AcroForm field dump, per-word coordinates — all via the same `toMarkdown()` entry point.
   - title: LlamaIndex-ready
     details: Optional `@nalinor/mupdf4llm/llama` subpath export ships a `PDFMarkdownReader` that yields one `Document` per page, with `llamaindex` as an optional peer dependency.
 ---
@@ -59,7 +59,7 @@ pnpm add @nalinor/mupdf4llm
 import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync } from "node:fs";
 
-const md = toMarkdown(readFileSync("paper.pdf"));
+const md = await toMarkdown(readFileSync("paper.pdf"));
 console.log(md);
 ```
 
@@ -68,7 +68,7 @@ Need per-page chunks for RAG? Switch to `toMarkdownPages`:
 ```ts
 import { toMarkdownPages } from "@nalinor/mupdf4llm";
 
-const chunks = toMarkdownPages(readFileSync("paper.pdf"), {
+const chunks = await toMarkdownPages(readFileSync("paper.pdf"), {
   extractWords: true,
 });
 for (const c of chunks) console.log(c.metadata.page, c.text.length);

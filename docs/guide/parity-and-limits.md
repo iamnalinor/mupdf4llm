@@ -37,12 +37,9 @@ to throw at runtime, which was misleading.
 ### OCR
 
 The official `mupdf` npm WASM bundle is built **without** Tesseract /
-Leptonica. The binary literally contains the string
-`"No OCR support in this build"`. If you need OCR, the realistic path
-is [`tesseract.js`](https://github.com/naptha/tesseract.js) on a
-rasterized `mupdf.Pixmap` — see
-[`src/ocr/README.md`](https://github.com/iamnalinor/mupdf4llm/blob/main/src/ocr/README.md)
-for a recipe.
+Leptonica, so there is no `get_textpage_ocr()` and no OCR of whole pages.
+Table cells can be OCR'd with a pluggable engine (RapidOCR by default) —
+see [OCR for tables](/guide/ocr).
 
 ## Known parity gaps (soft)
 

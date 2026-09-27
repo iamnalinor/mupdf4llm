@@ -6,7 +6,7 @@ Two image-handling modes, mutually exclusive: write to disk
 ## Write to disk
 
 ```ts
-toMarkdown(buf, {
+await toMarkdown(buf, {
   writeImages: true,
   imagePath: "out/images", // created if missing
   imageFormat: "png",
@@ -22,7 +22,7 @@ referenced from the Markdown as `![image-N-I](path)`.
 ## Inline as base64
 
 ```ts
-toMarkdown(buf, { embedImages: true });
+await toMarkdown(buf, { embedImages: true });
 ```
 
 Each image becomes a `![image-N-I](data:image/png;base64,…)` link.
@@ -37,7 +37,7 @@ fraction of the corresponding page edge. Bump it to `0.1` if you want
 only large figures, drop to `0.01` to keep everything.
 
 ```ts
-toMarkdown(buf, { embedImages: true, imageSizeLimit: 0.1 });
+await toMarkdown(buf, { embedImages: true, imageSizeLimit: 0.1 });
 ```
 
 ## DPI
@@ -52,7 +52,7 @@ Lower = smaller files. Higher = sharper but bigger.
 ## Inspecting
 
 ```ts
-const chunks = toMarkdownPages(buf, { writeImages: true, imagePath: "out" });
+const chunks = await toMarkdownPages(buf, { writeImages: true, imagePath: "out" });
 for (const c of chunks) {
   for (const img of c.images) {
     console.log(img.bbox, img.ref); // ref is the saved file path

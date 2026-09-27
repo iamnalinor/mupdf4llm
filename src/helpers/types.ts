@@ -1,5 +1,6 @@
 import type { Rect, BBox } from "./geometry";
 import type { Word } from "./text/extractWords";
+import type { OcrEngine } from "./ocr/engine";
 
 export interface CharBBox {
   c: string;
@@ -86,6 +87,17 @@ export interface CellStyle {
   lineBreak: boolean;
 }
 
+/** Where a table cell's text came from: the PDF text layer, OCR, or OCR that failed. */
+export type CellSource = "pdf" | "ocr" | "failed";
+
+export interface CellText {
+  text: string;
+  source: CellSource;
+}
+
+/** Where table cell text is taken from. See {@link MarkdownOptions.textSource}. */
+export type TextSource = "pdf" | "ocr" | "auto";
+
 export interface TableData {
   bbox: BBox;
   header: { bbox: BBox; cells: (BBox | null)[]; external: boolean };
@@ -93,6 +105,10 @@ export interface TableData {
   row_count: number;
   col_count: number;
   to_markdown(clean?: boolean, style?: CellStyle): string;
+  /** Plain text and source of every cell; `null` where a merged cell continues. */
+  cellTexts(): (CellText | null)[][];
+  /** Replace a cell's text (used for OCR results). */
+  setCellText(row: number, col: number, text: CellText): void;
 }
 
 export interface FormField {
@@ -120,7 +136,31 @@ export interface MarkdownOptions {
   pageSeparators?: boolean;
   margins?: number | [number, number] | [number, number, number, number];
   dpi?: number;
-  tableStrategy?: "lines_strict" | "lines" | "text" | "explicit" | null;
+  /**
+   * How tables are found. `"pixels"` finds ruling lines on the rendered page
+   * instead of in the PDF drawings, so it works on scans; it implies
+   * `textSource: "ocr"` unless `textSource` is given.
+   */
+  tableStrategy?: "lines_strict" | "lines" | "text" | "explicit" | "pixels" | null;
+  /**
+   * Where table cell text comes from, independent of how the table was found:
+   * - `"pdf"`: the PDF text layer (default, except for `tableStrategy: "pixels"`).
+   * - `"ocr"`: OCR of every cell; the text layer is ignored (default for `"pixels"`).
+   * - `"auto"`: the text layer, and OCR for cells whose text is empty or looks
+   *   broken (replacement or private-use characters, a letter of another
+   *   script slipped into a word, mostly symbols).
+   *
+   * The source of each cell is reported in `PageChunk.tables[].cells`.
+   */
+  textSource?: TextSource;
+  /**
+   * OCR engine for table cells. Defaults to RapidOCR (PP-OCRv5 via the
+   * optional peer dependencies `ppu-paddle-ocr` + `onnxruntime-node`), which
+   * is loaded on first use. Any object with `recognize(image)` works.
+   */
+  ocr?: OcrEngine;
+  /** Resolution the page is rendered at for `"pixels"` and OCR. Default 300. */
+  ocrDpi?: number;
   /** Explicit grid coordinates for `tableStrategy: "explicit"`. */
   explicitTableGrids?: { hLines: number[]; vLines: number[] }[];
   /** Skip spans whose font size is below this threshold (in pt). Mirrors upstream FONTSIZE_LIMIT. */
@@ -163,7 +203,13 @@ export interface PageContext {
 export interface PageChunk {
   metadata: Record<string, unknown>;
   toc_items: [number, string, number][];
-  tables: { bbox: BBox; rows: number; columns: number }[];
+  tables: {
+    bbox: BBox;
+    rows: number;
+    columns: number;
+    /** Plain text and source of every cell; `null` where a merged cell continues. */
+    cells: (CellText | null)[][];
+  }[];
   images: ImageInfo[];
   text: string;
   /** Populated when MarkdownOptions.extractWords is true. */

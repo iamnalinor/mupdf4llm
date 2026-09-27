@@ -1,5 +1,13 @@
 import { Rect, type BBox } from "../geometry";
-import type { Block, TableData, DrawingEdge, DrawingPath, Span, CellStyle } from "../types";
+import type {
+  Block,
+  TableData,
+  DrawingEdge,
+  DrawingPath,
+  Span,
+  CellStyle,
+  CellText,
+} from "../types";
 import { areDisjoint } from "../utils";
 import { FLAG_BOLD, FLAG_ITALIC, FLAG_MONOSPACED, CHAR_BOLD } from "../constants";
 
@@ -298,13 +306,14 @@ function buildCells(
   hLines: { y: number; x0: number; x1: number }[],
   vLines: { x: number; y0: number; y1: number }[],
   blocks: Block[],
+  inkWords?: BBox[],
 ): (BBox | null)[][] {
   const nr = rows.length - 1;
   const nc = cols.length - 1;
   if (nr <= 0 || nc <= 0) return [];
   const hs = hLines.map((h) => ({ pos: h.y, lo: h.x0, hi: h.x1 }));
   const vs = vLines.map((v) => ({ pos: v.x, lo: v.y0, hi: v.y1 }));
-  const words = wordBoxes(blocks, new Rect(cols[0]!, rows[0]!, cols[nc]!, rows[nr]!));
+  const words = inkWords ?? wordBoxes(blocks, new Rect(cols[0]!, rows[0]!, cols[nc]!, rows[nr]!));
   // Does a word cross the vertical border x within the band [y0, y1)?
   const crossesV = (x: number, y0: number, y1: number) =>
     words.some((w) => {
@@ -422,8 +431,10 @@ class Table implements TableData {
   row_count: number;
   col_count: number;
   private blocks: Block[];
+  /** Cell texts that replace the text layer (OCR results), keyed by `row,col`. */
+  private override = new Map<string, CellText>();
 
-  constructor(blocks: Block[], cluster: ClusterCandidate) {
+  constructor(blocks: Block[], cluster: ClusterCandidate, words?: BBox[]) {
     const cols = uniqueSorted(cluster.vLines.map((v) => v.x));
     const rows = uniqueSorted(cluster.hLines.map((h) => h.y));
     this.col_count = Math.max(0, cols.length - 1);
@@ -431,7 +442,7 @@ class Table implements TableData {
     this.blocks = blocks;
     this.bbox = [cluster.bbox.x0, cluster.bbox.y0, cluster.bbox.x1, cluster.bbox.y1];
 
-    this.cells = buildCells(cols, rows, cluster.hLines, cluster.vLines, blocks);
+    this.cells = buildCells(cols, rows, cluster.hLines, cluster.vLines, blocks, words);
     const headerRow = this.cells[0] ?? [];
     // First grid row; with merged cells its first/last entries may be null.
     const hasGrid = this.row_count > 0 && this.col_count > 0;
@@ -455,11 +466,17 @@ class Table implements TableData {
       const markdown = r !== 0;
       for (let c = 0; c < this.col_count; c++) {
         const cell = this.cells[r]![c];
-        const txt = cell ? extractCellText(this.blocks, Rect.from(cell), markdown, style) : "";
+        const ocr = this.override.get(`${r},${c}`);
+        const txt = ocr
+          ? ocr.text
+          : cell
+            ? extractCellText(this.blocks, Rect.from(cell), markdown, style)
+            : "";
         // A raw newline would terminate the markdown table row, so body cells
         // get the same treatment as the header when `<br>` is disabled.
+        // OCR text is plain, with lines separated by "\n".
         const headerTxt = style.lineBreak ? txt.replace(/\n/g, "<br>") : joinCellLines(txt);
-        row.push(escapeMarkdownCell(markdown && style.lineBreak ? txt : headerTxt));
+        row.push(escapeMarkdownCell(markdown && style.lineBreak && !ocr ? txt : headerTxt));
       }
       grid.push(row);
     }
@@ -470,6 +487,24 @@ class Table implements TableData {
       out += "|" + grid[r]!.join("|") + "|\n";
     }
     return out + "\n";
+  }
+
+  cellTexts(): (CellText | null)[][] {
+    return this.cells.map((row, r) =>
+      row.map((cell, c) => {
+        if (!cell) return null;
+        return (
+          this.override.get(`${r},${c}`) ?? {
+            text: extractCellText(this.blocks, Rect.from(cell), false),
+            source: "pdf",
+          }
+        );
+      }),
+    );
+  }
+
+  setCellText(row: number, col: number, text: CellText): void {
+    this.override.set(`${row},${col}`, text);
   }
 }
 
@@ -563,6 +598,24 @@ function findTablesExplicit(
     out.push(new Table(blocks, { bbox, hLines: hLineRecs, vLines: vLineRecs }));
   }
   return out;
+}
+
+/** A table read off a rendered page: its rules and the boxes of its words. */
+export interface RuledGrid {
+  hLines: { y: number; x0: number; x1: number }[];
+  vLines: { x: number; y0: number; y1: number }[];
+  /** Word boxes from the pixels; decide merged cells where a rule is missing. */
+  words: BBox[];
+}
+
+/** Tables from grids found on a raster (`tableStrategy: "pixels"`). */
+export function tablesFromGrids(blocks: Block[], grids: RuledGrid[]): TableData[] {
+  return grids.map((g) => {
+    const xs = g.vLines.map((v) => v.x);
+    const ys = g.hLines.map((h) => h.y);
+    const bbox = new Rect(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys));
+    return new Table(blocks, { bbox, hLines: g.hLines, vLines: g.vLines }, g.words);
+  });
 }
 
 type TextRow = {

@@ -29,14 +29,24 @@ bun add @nalinor/mupdf4llm
 Requires Node 20+ or Bun ≥ 1.0. The only runtime dependency is `mupdf`
 (WASM, no native build).
 
+The package is ESM only (`import`). From CommonJS code, load it with
+`const { toMarkdown } = await import("@nalinor/mupdf4llm")`: its `mupdf`
+dependency uses top-level await, which `require()` cannot load.
+
 ## Quick start
 
 ```ts
 import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync } from "node:fs";
 
-const md = toMarkdown(readFileSync("paper.pdf"));
+const md = await toMarkdown(readFileSync("paper.pdf"));
 console.log(md);
+```
+
+Tables in scans, with OCR of every cell (`npm i ppu-paddle-ocr onnxruntime-node` once):
+
+```ts
+const md = await toMarkdown(readFileSync("scan.pdf"), { tableStrategy: "pixels" });
 ```
 
 Per-page chunks for RAG:
@@ -44,7 +54,7 @@ Per-page chunks for RAG:
 ```ts
 import { toMarkdownPages } from "@nalinor/mupdf4llm";
 
-const chunks = toMarkdownPages(readFileSync("paper.pdf"), {
+const chunks = await toMarkdownPages(readFileSync("paper.pdf"), {
   extractWords: true,
 });
 ```
@@ -57,7 +67,8 @@ LlamaIndex adapter.
 
 - Reading-order text extraction with header inference (`IdentifyHeaders`, `TocHeaders`)
 - Multi-column layout detection
-- Four table strategies: `lines_strict`, `lines`, `text`, `explicit`
+- Five table strategies: `lines_strict`, `lines`, `text`, `explicit`, and `pixels` for scans
+- OCR of table cells (`textSource`), RapidOCR by default via optional peers, or any engine you plug in
 - Image extraction (`writeImages`) and inline base64 embedding (`embedImages`)
 - Per-word coordinates (`extractWords`)
 - Form-field extraction (`getKeyValues`)
@@ -69,9 +80,9 @@ LlamaIndex adapter.
 - **`pymupdf.layout` features** (`to_text`, `to_json`, layout-mode
   `to_markdown`) — require Artifex's closed-source `pymupdf-layout`
   ONNX wheel (Polyform Noncommercial license, no JS distribution).
-- **OCR** — the official `mupdf` WASM bundle ships without
-  Tesseract/Leptonica. See
-  [`src/ocr/README.md`](src/ocr/README.md) for a `tesseract.js` recipe.
+- **Whole-page OCR** — the official `mupdf` WASM bundle ships without
+  Tesseract/Leptonica. Only table cells are OCR'd; see the
+  [OCR guide](https://iamnalinor.github.io/mupdf4llm/guide/ocr).
 
 Detailed write-up: [parity and limits](https://iamnalinor.github.io/mupdf4llm/guide/parity-and-limits).
 
@@ -83,7 +94,7 @@ pip install pymupdf4llm   # required for the parity test suite
 bun test                  # parity + unit tests
 bun run lint              # prettier --write + eslint + tsc
 bun run docs:dev          # local doc preview at http://localhost:5173
-bun run build             # emits dist/{index,llama}.{js,cjs,d.ts}
+bun run build             # emits dist/{index,llama}.{js,d.ts}
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for release workflow and project layout.

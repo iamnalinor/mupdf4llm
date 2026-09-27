@@ -4,7 +4,7 @@ For long documents, set `showProgress: true` to render a per-page
 progress bar on `stderr`:
 
 ```ts
-toMarkdown(buf, { showProgress: true });
+await toMarkdown(buf, { showProgress: true });
 // pages [##########----------]  50% (50/100)
 ```
 

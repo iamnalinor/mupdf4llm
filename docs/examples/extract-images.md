@@ -7,7 +7,7 @@ import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 
 mkdirSync("out/images", { recursive: true });
-const md = toMarkdown(readFileSync("report.pdf"), {
+const md = await toMarkdown(readFileSync("report.pdf"), {
   writeImages: true,
   imagePath: "out/images",
   imageFormat: "jpg",
@@ -24,7 +24,7 @@ The markdown picks up references like
 ## Embed inline as base64
 
 ```ts
-const md = toMarkdown(buf, {
+const md = await toMarkdown(buf, {
   embedImages: true, // mutually exclusive with writeImages
   imageFormat: "png",
   dpi: 150,
@@ -40,7 +40,7 @@ emitted ref:
 ```ts
 import { toMarkdownPages } from "@nalinor/mupdf4llm";
 
-const chunks = toMarkdownPages(buf, {
+const chunks = await toMarkdownPages(buf, {
   writeImages: true,
   imagePath: "out/images",
 });

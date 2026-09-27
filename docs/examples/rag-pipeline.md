@@ -12,7 +12,7 @@ import { upsert } from "./my-vector-store";
 
 async function indexPdf(filePath: string) {
   const buf = readFileSync(filePath);
-  const chunks = toMarkdownPages(buf, { extractWords: true });
+  const chunks = await toMarkdownPages(buf, { extractWords: true });
 
   for (const c of chunks) {
     if (!c.text.trim()) continue;
@@ -51,7 +51,7 @@ function sectionChunks(text: string): string[] {
   return out;
 }
 
-for (const c of toMarkdownPages(pdf)) {
+for (const c of await toMarkdownPages(pdf)) {
   for (const sub of sectionChunks(c.text)) {
     await upsert({ /* ... */ payload: { page: c.metadata.page, text: sub } });
   }

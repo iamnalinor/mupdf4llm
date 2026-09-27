@@ -14,7 +14,7 @@ transposes the rows and columns of any table on a quarter-turned page.
 ## Default behaviour
 
 ```ts
-toMarkdown(buf); // removeRotation: true by default
+await toMarkdown(buf); // removeRotation: true by default
 ```
 
 The document is loaded from an in-memory buffer and never written back,
@@ -26,7 +26,7 @@ For inputs you know are correctly oriented (or where stripping
 rotation worsens extraction):
 
 ```ts
-toMarkdown(buf, { removeRotation: false });
+await toMarkdown(buf, { removeRotation: false });
 ```
 
 ## Manual control

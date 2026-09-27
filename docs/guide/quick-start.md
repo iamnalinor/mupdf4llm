@@ -11,20 +11,20 @@ Returns a single Markdown string for the whole document.
 import { toMarkdown } from "@nalinor/mupdf4llm";
 import { readFileSync } from "node:fs";
 
-const md = toMarkdown(readFileSync("paper.pdf"));
+const md = await toMarkdown(readFileSync("paper.pdf"));
 ```
 
 On Bun:
 
 ```ts
-const md = toMarkdown(await Bun.file("paper.pdf").bytes());
+const md = await toMarkdown(await Bun.file("paper.pdf").bytes());
 ```
 
 Browser:
 
 ```ts
 const buf = await fetch("paper.pdf").then((r) => r.arrayBuffer());
-const md = toMarkdown(buf);
+const md = await toMarkdown(buf);
 ```
 
 ## `toMarkdownPages(buf, opts?)`
@@ -35,7 +35,7 @@ each chunk to carry the page number / TOC items as metadata.
 ```ts
 import { toMarkdownPages } from "@nalinor/mupdf4llm";
 
-const chunks = toMarkdownPages(readFileSync("paper.pdf"));
+const chunks = await toMarkdownPages(readFileSync("paper.pdf"));
 for (const c of chunks) {
   console.log(`page ${c.metadata.page}: ${c.text.length} chars`);
 }
@@ -46,19 +46,19 @@ for (const c of chunks) {
 Selected pages only:
 
 ```ts
-toMarkdown(buf, { pages: [0, 4, 5] });
+await toMarkdown(buf, { pages: [0, 4, 5] });
 ```
 
 Embed images inline as base64 data URLs:
 
 ```ts
-toMarkdown(buf, { embedImages: true });
+await toMarkdown(buf, { embedImages: true });
 ```
 
 Or save them to a folder and link by path:
 
 ```ts
-toMarkdown(buf, {
+await toMarkdown(buf, {
   writeImages: true,
   imagePath: "out/images",
   imageFormat: "jpg",
@@ -69,20 +69,20 @@ toMarkdown(buf, {
 Per-word coordinates inside the chunks:
 
 ```ts
-toMarkdownPages(buf, { extractWords: true });
+await toMarkdownPages(buf, { extractWords: true });
 // chunks[0].words[i] = { x0, y0, x1, y1, text, block, line, word }
 ```
 
 Page separators in the joined output:
 
 ```ts
-toMarkdown(buf, { pageSeparators: true });
+await toMarkdown(buf, { pageSeparators: true });
 ```
 
 Disable table detection if it gets in the way:
 
 ```ts
-toMarkdown(buf, { tableStrategy: null });
+await toMarkdown(buf, { tableStrategy: null });
 ```
 
 ## Next

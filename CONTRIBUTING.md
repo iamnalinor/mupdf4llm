@@ -23,7 +23,27 @@ Inner loop:
 bun test               # 15 tests across parity, real fixtures, units
 bun run lint           # prettier --write . && eslint . && tsc --noEmit
 bun run lint:check     # CI-style — fails on style drift instead of fixing it
-bun run build          # emits dist/{index,llama}.{js,cjs,d.ts}
+bun run build          # emits dist/{index,llama}.{js,d.ts}
+```
+
+The `scan-*.pdf` fixtures are real scans in the public domain, taken from
+the Internet Archive and stored as grey JPEG pages:
+`scan-us-census-1900.pdf` — Twelfth Census of the United States (1900),
+identifier `b32182661_0003` (Public Domain Mark); `scan-ru-census-1918.pdf`
+and `scan-ru-prose-1918.pdf` — «Всероссийская промышленная и
+профессиональная перепись 1918 года», ЦСУ, 1920, identifier
+`vserossijskajapromyshlennajaiprofessiona91` (a state publication without
+personal authors, over 100 years old). Only add scans whose public-domain
+status is clear. `tests/helpers/degrade.ts` makes worse copies of them
+(skew, noise, specks, low resolution) for the robustness tests.
+
+OCR tests use a fake engine. To also run the real RapidOCR test (downloads
+~13 MB of models on first run):
+
+```sh
+# install next to the repo, not into package.json (they are optional peers)
+npm i --prefix .. --no-package-lock ppu-paddle-ocr onnxruntime-node
+MUPDF4LLM_OCR_IT=1 bun test tests/ocr.test.ts
 ```
 
 Docs:
@@ -63,11 +83,13 @@ src/
       formFields.ts         getKeyValues — port of utils.get_key_values
   llama/
 pdfMarkdownReader.ts    LlamaIndex adapter (@nalinor/mupdf4llm/llama subpath)
-  ocr/
-    README.md               why no OCR + tesseract.js recipe
+  helpers/ocr/              OcrEngine interface, page raster/crops, RapidOCR adapter,
+                            per-cell text sourcing (textSource)
+  helpers/tables/pixelGrid.ts  ruling-line detection on the rendered page ("pixels")
 tests/
   fixtures.test.ts          synthetic (exact) + vendored (tiered) parity fixtures
   units.test.ts             unit tests for utils, geometry, progress, headers
+  ocr.test.ts               pixels strategy, textSource, OCR engine plumbing
   fixtures/                 vendored real-world PDFs (public domain / MIT)
                             + synthetic table PDFs (see make-table-fixtures.ts)
 docs/                       VitePress + TypeDoc documentation site
