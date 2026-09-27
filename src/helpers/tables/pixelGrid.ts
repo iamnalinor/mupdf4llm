@@ -405,12 +405,12 @@ function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | nul
       const rb = rows[rows.indexOf(ra) + 1]!;
       for (const x of vLines.slice(1, -1)) {
         const ruled = inner.some((v) => v.x === x && v.y0 < rb - DOUBLE && v.y1 > ra + DOUBLE);
-        // Groups can be told apart by shading instead of a rule.
+        if (ruled) continue;
+        // Groups can be told apart by shading instead of a rule; a change of
+        // shading separates like a rule would (unmeasurable: no change).
         const shaded =
           Math.abs(paper(raster, x - 6, x - 2, ra, rb) - paper(raster, x + 2, x + 6, ra, rb)) > 12;
         const mid = (ra + rb) / 2;
-        if (ruled) continue;
-        // A change of shading separates like a rule would.
         if (shaded) inner.push({ x, y0: ra, y1: rb });
         else words.push([x - 2, mid - 0.5, x + 2, mid + 0.5]);
       }
@@ -423,7 +423,7 @@ function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | nul
   };
 }
 
-/** Median grey of the paper (non-ink pixels) in a page-coordinate box. */
+/** Median grey of the paper (non-ink pixels) in a page-coordinate box; NaN without any. */
 function paper(raster: PageRaster, x0: number, x1: number, y0: number, y1: number): number {
   const { width: w, data } = raster;
   const ink = raster.ink;
@@ -437,6 +437,8 @@ function paper(raster: PageRaster, x0: number, x1: number, y0: number, y1: numbe
       n++;
     }
   }
+  // Nothing to measure (a thin row, a strip full of ink).
+  if (!n) return NaN;
   let acc = 0;
   for (let v = 0; v < 256; v++) {
     acc += hist[v]!;
@@ -496,9 +498,14 @@ export function rowBreaks(lines: TextLine[], ncol: number, ruled: boolean): numb
   // a second column with its hyphen or leader dots.
   const need = Math.max(2, Math.ceil(ncol / 2));
   const isAnchor = (l: TextLine) => l.cols >= need;
-  // Between two rules, data lines cut from one run of ink are one line: the
-  // waist of a digit ("0", "6") can look like the gap between two lines.
-  if (ruled && new Set(lines.filter(isAnchor).map((l) => l.run)).size <= 1) return [];
+  // Between two rules, two data lines cut from one run of ink are one line:
+  // the waist of a digit ("0", "6") looks like the gap between two lines and
+  // halves the line. Three or more are lines set solid.
+  if (ruled) {
+    const anchors = lines.filter(isAnchor);
+    if (anchors.length <= 1) return [];
+    if (anchors.length === 2 && anchors[0]!.run === anchors[1]!.run) return [];
+  }
   // Without any multi-column line, every text line is a row.
   if (!lines.some(isAnchor)) return breaksBetween(lines.map((l) => [l]));
 

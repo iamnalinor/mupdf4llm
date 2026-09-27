@@ -29,7 +29,7 @@ const rows = (md: string) =>
     .filter((l) => l.startsWith("|") && !l.startsWith("|---"))
     .map((l) => l.slice(1, -1).split("|"));
 
-test("await using disposes an engine from createRapidOcr at the end of the block", async () => {
+test("await using disposes an engine made disposable, as createRapidOcr returns it", async () => {
   let disposed = 0;
   {
     await using ocr = disposable({
@@ -57,6 +57,12 @@ describe("rowBreaks", () => {
     // taken for a gap, so the value line came out as two "data lines".
     const lines = [line(0, 6, 0), line(5.5, 5, 0), line(11, 1, 1)];
     expect(rowBreaks(lines, 6, true)).toEqual([]);
+  });
+
+  test("between rules, three or more data lines set solid are separate rows", () => {
+    // A waist splits one line in two; three data lines from one run are lines.
+    const lines = [line(0, 6, 0), line(5.5, 6, 0), line(11, 6, 0)];
+    expect(rowBreaks(lines, 6, true)).toEqual([5.25, 10.75]);
   });
 
   test("between rules, data lines from separate runs are separate rows", () => {
@@ -146,6 +152,17 @@ test("looksBroken: a stray letter of another script inside a word", () => {
   expect(looksBroken("\u65e5\u672c\u8a9e\u3067\u3059")).toBe(false);
   expect(looksBroken("T\u30b7\u30e3\u30c4")).toBe(false);
   expect(looksBroken("X\u7dda")).toBe(false);
+  // Scripts written without spaces carry Latin words inside: "支持PDF格式",
+  // "日本IBM社", "中文abc中文", "한국LG전자".
+  expect(looksBroken("\u652f\u6301PDF\u683c\u5f0f")).toBe(false);
+  expect(looksBroken("\u65e5\u672cIBM\u793e")).toBe(false);
+  expect(looksBroken("\u4e2d\u6587abc\u4e2d\u6587")).toBe(false);
+  expect(looksBroken("\ud55c\uad6dLG\uc804\uc790")).toBe(false);
+  // Units and symbols: Greek mu or the micro sign, lambda.
+  expect(looksBroken("\u03bcmol/L")).toBe(false);
+  expect(looksBroken("\u00b5mol")).toBe(false);
+  expect(looksBroken("\u03bbmax")).toBe(false);
+  expect(looksBroken("Gr\u00f6\u00dfe na\u00efve")).toBe(false);
 });
 
 test("looksBroken", () => {
@@ -473,6 +490,22 @@ describe("pixels strategy on real scans", () => {
     });
     const header = page!.tables[0]!.cells[0]!;
     expect(header.map((x) => (x === null ? "-" : "x")).join("")).toBe("xx--x--");
+  }, 60_000);
+
+  test("the engine is called one request at a time", async () => {
+    // Multi-line cells trigger the per-line fallback (one line read of two).
+    let running = 0;
+    let most = 0;
+    const ocr: OcrEngine = {
+      async recognize() {
+        most = Math.max(most, ++running);
+        await new Promise((r) => setTimeout(r, 1));
+        running--;
+        return "a";
+      },
+    };
+    await toMarkdown(fixture("scan-ru-census-1918.pdf"), { tableStrategy: "pixels", ocr });
+    expect(most).toBe(1);
   }, 60_000);
 
   test("group header labels become merged cells", async () => {

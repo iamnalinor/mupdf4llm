@@ -120,8 +120,9 @@ import { toMarkdown, createRapidOcr } from "@nalinor/mupdf4llm";
 }
 ```
 
-`await using` needs Node ≥ 20.4 or Bun (and TypeScript ≥ 5.2). Without
-it, call `await ocr.dispose()` in a `finally` block.
+`await using` runs natively on Node ≥ 24 and Bun; on Node 20.4–22 it
+works in code compiled by TypeScript ≥ 5.2 (or a bundler that supports
+it). Otherwise call `await ocr.dispose()` in a `finally` block.
 
 `model` takes any `ppu-paddle-ocr` preset name (`"v5-en-mobile"`,
 `"v5-eslav-mobile"`, `"v6-small"`, …) or explicit

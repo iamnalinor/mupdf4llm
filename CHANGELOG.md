@@ -44,7 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dependencies `ppu-paddle-ocr` + `onnxruntime-node`), loaded only when a
   cell needs OCR. A multi-line cell is recognised line by line when the
   whole-cell result misses lines; leader dots are removed. `createRapidOcr({ model })` creates a reusable engine
-  (disposable with `await using`);
+  (disposable with `await using`; its type uses `AsyncDisposable`, which
+  needs TypeScript ≥ 5.2 with the `esnext.disposable` lib unless
+  `skipLibCheck` is on);
   a missing package or model rejects with `OcrSetupError` (exported),
   which custom engines throw for fatal setup problems too.
   OCR runs per table cell, not per page.
