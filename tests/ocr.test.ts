@@ -126,16 +126,26 @@ test("PageRaster.crop drops empty cells and trims ruling lines", () => {
   expect(Array.from(img.png().slice(1, 4))).toEqual([0x50, 0x4e, 0x47]); // "PNG"
 });
 
-test("looksBroken: Cyrillic and Latin letters mixed inside one word", () => {
-  // A Latin "c" in a Cyrillic word: looks right, breaks search.
-  expect(looksBroken("И" + "c" + "тория искусств")).toBe(true);
-  expect(looksBroken("язы" + "k")).toBe(true);
-  // Separate words in different scripts are normal.
+test("looksBroken: a stray letter of another script inside a word", () => {
+  // One letter of another script inside a word: a broken text layer.
+  expect(looksBroken("И" + "c" + "тория искусств")).toBe(true); // Latin c in Cyrillic
+  expect(looksBroken("язы" + "k")).toBe(true); // Latin k at the end
+  expect(looksBroken("Hell" + "о world")).toBe(true); // Cyrillic о in Latin
+  expect(looksBroken("\u03b1\u03bb\u03c6" + "a")).toBe(true); // Latin a in Greek
+  // Whole pieces in different scripts are how people write.
+  expect(looksBroken("ITотдел")).toBe(false);
+  expect(looksBroken("PDFфайл")).toBe(false);
+  expect(looksBroken("iPhoneом")).toBe(false);
   expect(looksBroken("История искусств")).toBe(false);
   expect(looksBroken("IT-отдел")).toBe(false);
   expect(looksBroken("Wi-Fi, 5 ГГц")).toBe(false);
   expect(looksBroken("XIV гр. Обработка")).toBe(false);
   expect(looksBroken("COVID-19")).toBe(false);
+  // Japanese mixes kanji and kana inside words; a capital Latin letter
+  // before kana is a normal loan ("T-shirt", "X-ray").
+  expect(looksBroken("\u65e5\u672c\u8a9e\u3067\u3059")).toBe(false);
+  expect(looksBroken("T\u30b7\u30e3\u30c4")).toBe(false);
+  expect(looksBroken("X\u7dda")).toBe(false);
 });
 
 test("looksBroken", () => {

@@ -35,8 +35,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from, independently of how the table was found. `"ocr"` recognises every
   cell (for a broken text layer under a good vector grid); `"auto"` OCRs
   only cells whose text is empty or contains replacement / private-use /
-  control characters, a word mixing Cyrillic and Latin letters, or mostly
-  symbols. Default `"pdf"`, so existing
+  control characters, a letter of another script slipped into a word
+  ("Иcтория" with a Latin c), or mostly symbols. Default `"pdf"`, so existing
   calls never run OCR.
 - Pluggable OCR: `ocr?: OcrEngine` accepts any object with
   `recognize(image) => Promise<string>`. The default engine is RapidOCR

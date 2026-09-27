@@ -6,14 +6,58 @@ import { OcrSetupError } from "./rapidOcr";
 const BROKEN_CHAR = /[\uFFFD\uE000-\uF8FF\u0000-\u0008\u000E-\u001F]/u;
 const WORD_CHAR = /[\p{L}\p{N}]/u;
 const LETTERS = /\p{L}+/gu;
-const CYRILLIC = /\p{Script=Cyrillic}/u;
-const LATIN = /\p{Script=Latin}/u;
+const LOWER = /\p{Ll}/u;
+/**
+ * Writing systems a letter can belong to. Han, Hiragana and Katakana are one
+ * group: Japanese mixes them inside words. Letters of other scripts share
+ * the group "other".
+ */
+const SCRIPTS: [string, RegExp][] = [
+  ["Latin", /\p{Script=Latin}/u],
+  ["Cyrillic", /\p{Script=Cyrillic}/u],
+  ["Greek", /\p{Script=Greek}/u],
+  ["Armenian", /\p{Script=Armenian}/u],
+  ["Georgian", /\p{Script=Georgian}/u],
+  ["Hebrew", /\p{Script=Hebrew}/u],
+  ["Arabic", /\p{Script=Arabic}/u],
+  ["Devanagari", /\p{Script=Devanagari}/u],
+  ["Thai", /\p{Script=Thai}/u],
+  ["Hangul", /\p{Script=Hangul}/u],
+  ["CJK", /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u],
+];
+const scriptOf = (ch: string) => SCRIPTS.find(([, re]) => re.test(ch))?.[0] ?? "other";
+
+/**
+ * A letter of one writing system slipped into a word of another, as a
+ * broken text layer or a look-alike substitution produces: "Иcтория" with a
+ * Latin c, "языk". Whole pieces in different scripts ("ITотдел",
+ * "iPhoneом") are how people write and do not count.
+ */
+function strayLetter(word: string): boolean {
+  const chars = [...word];
+  const runs: { script: string; from: number; to: number }[] = [];
+  chars.forEach((ch, i) => {
+    const script = scriptOf(ch);
+    const last = runs[runs.length - 1];
+    if (last && last.script === script) last.to = i;
+    else runs.push({ script, from: i, to: i });
+  });
+  // A piece of another script inside the word.
+  if (runs.length >= 3) return true;
+  if (runs.length !== 2) return false;
+  // Or a single lowercase letter at either end, next to lowercase letters.
+  const [a, b] = runs as [(typeof runs)[0], (typeof runs)[0]];
+  const single = a.from === a.to ? a.from : b.from === b.to ? b.from : -1;
+  if (single < 0 || chars.length < 3) return false;
+  const neighbour = single === 0 ? chars[1]! : chars[single - 1]!;
+  return LOWER.test(chars[single]!) && LOWER.test(neighbour);
+}
 
 /**
  * Does text from the PDF text layer look unusable? True for empty text, for
  * replacement, private-use or control characters (typical of a missing or
- * broken ToUnicode map), for a word that mixes Cyrillic and Latin letters
- * (a Latin "c" in a Cyrillic word reads right but breaks search), and for
+ * broken ToUnicode map), for a letter of another script slipped into a
+ * word (a Latin "c" in "Иcтория" reads right but breaks search), and for
  * text of four or more characters that is mostly neither letters nor
  * digits.
  */
@@ -22,9 +66,7 @@ export function looksBroken(text: string): boolean {
   if (!t) return true;
   if (BROKEN_CHAR.test(t)) return true;
   // Words split at anything but a letter: "IT-отдел" is two words.
-  for (const word of text.match(LETTERS) ?? []) {
-    if (CYRILLIC.test(word) && LATIN.test(word)) return true;
-  }
+  for (const word of text.match(LETTERS) ?? []) if (strayLetter(word)) return true;
   if (t.length < 4) return false;
   let word = 0;
   for (const ch of t) if (WORD_CHAR.test(ch)) word++;

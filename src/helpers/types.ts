@@ -147,8 +147,8 @@ export interface MarkdownOptions {
    * - `"pdf"`: the PDF text layer (default, except for `tableStrategy: "pixels"`).
    * - `"ocr"`: OCR of every cell; the text layer is ignored (default for `"pixels"`).
    * - `"auto"`: the text layer, and OCR for cells whose text is empty or looks
-   *   broken (replacement or private-use characters, Cyrillic and Latin
-   *   letters mixed in one word, mostly symbols).
+   *   broken (replacement or private-use characters, a letter of another
+   *   script slipped into a word, mostly symbols).
    *
    * The source of each cell is reported in `PageChunk.tables[].cells`.
    */
