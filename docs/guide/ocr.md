@@ -37,6 +37,9 @@ What it handles, as found in real printed tables:
   (dropped before OCR), show-through from the back of the page, broken
   thin rules, and pages fed askew up to 3° (the page is deskewed first).
 - **Leader dots** ("Total ........ 1900") are removed from cell text.
+- **Latin look-alikes** the engine mixes into Cyrillic ("Мосkвa",
+  "Kлaсс", "АHHа") are put back as Cyrillic letters; Latin words and
+  words with Latin letters that have no Cyrillic twin stay as read.
 
 Not handled yet: tables without any vertical rules (borderless), text
 set vertically in the header (it is recognised as noise or skipped).

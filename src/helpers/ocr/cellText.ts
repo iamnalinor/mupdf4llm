@@ -206,7 +206,7 @@ async function ocrCells(
         }
         // Only dots read (an empty value) is a result; nothing read is a
         // failure. Under "auto" a failed cell keeps its text-layer text.
-        if (text) tab.setCellText(r, c, { text: stripLeaders(text), source: "ocr" });
+        if (text) tab.setCellText(r, c, { text: fixHomoglyphs(stripLeaders(text)), source: "ocr" });
         else tab.setCellText(r, c, { text: texts ? texts[r]![c]!.text : "", source: "failed" });
       }
     }
@@ -229,4 +229,62 @@ export function stripLeaders(text: string): string {
     )
     .filter(Boolean)
     .join("\n");
+}
+
+/** Latin letters and the Cyrillic letters they look like. */
+const TWINS: Record<string, string> = {
+  A: "А",
+  B: "В",
+  C: "С",
+  E: "Е",
+  H: "Н",
+  K: "К",
+  M: "М",
+  O: "О",
+  P: "Р",
+  T: "Т",
+  X: "Х",
+  Y: "У",
+  a: "а",
+  c: "с",
+  e: "е",
+  k: "к",
+  o: "о",
+  p: "р",
+  x: "х",
+  y: "у",
+};
+const LATIN = /\p{Script=Latin}/u;
+const CYRILLIC = /\p{Script=Cyrillic}/u;
+
+/**
+ * Put Cyrillic letters in place of the Latin look-alikes an OCR engine mixes
+ * into Cyrillic text ("Мосkвa", "Kлaсс"). A word of both scripts is fixed
+ * when each of its Latin letters has a Cyrillic twin; a word all of twins
+ * ("CaBBa") only when the text around it is Cyrillic. A capital put in
+ * inside a word that ends in small letters ("АHHа") becomes small. Real
+ * Latin words, and words with Latin letters that have no twin ("IT-отдел",
+ * "Archiaров"), are left alone.
+ */
+export function fixHomoglyphs(text: string): string {
+  const words = text.match(/\p{L}+/gu) ?? [];
+  const cyrillic = words.filter((w) => CYRILLIC.test(w) && !LATIN.test(w)).length;
+  const latin = words.filter((w) => LATIN.test(w) && !CYRILLIC.test(w)).length;
+  return text.replace(/\p{L}+/gu, (word) => {
+    const chars = [...word];
+    const lat = chars.filter((ch) => LATIN.test(ch));
+    if (!lat.length || !lat.every((ch) => ch in TWINS)) return word;
+    const mixed = lat.length < chars.length;
+    // A word all of twins: Cyrillic only when Cyrillic words outnumber the
+    // other Latin ones.
+    if (!mixed && cyrillic <= latin - 1) return word;
+    const endsSmall = /\p{Ll}/u.test(chars[chars.length - 1]!);
+    return chars
+      .map((ch, i) => {
+        if (!(ch in TWINS)) return ch;
+        const twin = TWINS[ch]!;
+        return i > 0 && endsSmall ? twin.toLowerCase() : twin;
+      })
+      .join("");
+  });
 }

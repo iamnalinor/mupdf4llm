@@ -5,7 +5,7 @@ import { toMarkdown, toMarkdownPages, createRapidOcr, OcrSetupError, Rect } from
 import type { MarkdownOptions, OcrEngine, OcrImage } from "../src/index";
 import { PageRaster, grayImage } from "../src/helpers/ocr/engine";
 import { disposable } from "../src/helpers/ocr/rapidOcr";
-import { looksBroken } from "../src/helpers/ocr/cellText";
+import { fixHomoglyphs, looksBroken } from "../src/helpers/ocr/cellText";
 import { detectRulings, rowBreaks } from "../src/helpers/tables/pixelGrid";
 import { inkAxis, textPlausibility, upsideDown } from "../src/helpers/layout/scanOrientation";
 import { degrade, type Degradation } from "./helpers/degrade";
@@ -236,6 +236,30 @@ test("looksBroken: a stray letter of another script inside a word", () => {
   expect(looksBroken("Gr\u00f6\u00dfe na\u00efve")).toBe(false);
 });
 
+test("fixHomoglyphs: Latin look-alikes in Cyrillic OCR text", () => {
+  expect(fixHomoglyphs("Мосkвa")).toBe("Москва");
+  expect(fixHomoglyphs("Moсkвa")).toBe("Москва");
+  expect(fixHomoglyphs("Kлaсс обучения")).toBe("Класс обучения");
+  expect(fixHomoglyphs("Анна АHHа")).toBe("Анна Анна");
+  expect(fixHomoglyphs("Николаев CaBBa Дмитриевич")).toBe("Николаев Савва Дмитриевич");
+  expect(fixHomoglyphs("Poмaнoвич")).toBe("Романович");
+  expect(fixHomoglyphs("г. Мосkвa\nул. Tвepскaя")).toBe("г. Москва\nул. Тверская");
+  // Left alone: real Latin, words mixed on purpose, letters without a twin.
+  for (const t of [
+    "IT-отдел",
+    "iPhone",
+    "PP-OCRv5",
+    "Total population",
+    "CaBBa",
+    "Team CaBBa",
+    "Dmitrievich",
+    "Archiaров",
+    "ЦСУ РСФСР",
+    "Москва о Москве",
+  ])
+    expect(fixHomoglyphs(t)).toBe(t);
+});
+
 test("looksBroken", () => {
   const pua = String.fromCharCode(0xe021, 0xe04e, 0xe06f);
   expect(looksBroken("")).toBe(true);
@@ -414,6 +438,14 @@ describe("textSource on a vector grid with a broken text layer", () => {
     expect(ocr.calls.length).toBe(0);
     expect(md).toBe(await toMarkdown(buf, { tableStrategy: "lines" }));
   });
+});
+
+test("OCR text of a cell gets its look-alike letters fixed", async () => {
+  const [page] = await toMarkdownPages(fixture("scanned-grid.pdf"), {
+    tableStrategy: "pixels",
+    ocr: fakeEngine(() => "Мосkвa"),
+  });
+  expect(page!.tables[0]!.cells[0]![0]!.text).toBe("Москва");
 });
 
 describe("auto with a font whose codes are broken", () => {
