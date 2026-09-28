@@ -266,21 +266,29 @@ export function findPixelGrids(raster: PageRaster): RuledGrid[] {
   const grids: RuledGrid[] = [];
   for (const group of groupColumns(vs)) {
     const inside = fadedInside(group, faded);
-    // A faded rule next to a rule of the group completes it, at its place:
-    // a faint halo is wider than the dark stroke and would move the border.
-    // It does not move the table's top or bottom either.
-    const xs = positions(group, MIN_COL);
-    const at = (x: number) => xs.find((p) => Math.abs(p - x) <= MIN_COL) ?? x;
+    // A faded rule next to rules of the group is one rule with them, at the
+    // place of the dark rule when that runs down most of the table (the
+    // faint halo is wider than the stroke), else at its own (a short dark
+    // piece may sit off the line). It does not move the table's top or
+    // bottom either.
     const lo = Math.min(...group.map((v) => v.a));
     const hi = Math.max(...group.map((v) => v.b));
-    const fit = (f: Seg) => ({ pos: at(f.pos), a: Math.max(f.a, lo), b: Math.min(f.b, hi) });
-    group.push(...inside.map(fit));
+    const places = new Map<Seg, number>();
+    for (const f of inside) {
+      const near = group.filter((v) => Math.abs(v.pos - f.pos) <= MIN_COL);
+      const dark = near.find((v) => v.b - v.a >= FADED_COVER * (hi - lo));
+      for (const v of [f, ...near]) places.set(v, (dark ?? f).pos);
+    }
+    for (const v of group) v.pos = places.get(v) ?? v.pos;
+    const at = (f: Seg) => places.get(f) ?? f.pos;
+    const fit = (f: Seg, x: number) => ({ pos: x, a: Math.max(f.a, lo), b: Math.min(f.b, hi) });
+    group.push(...inside.map((f) => fit(f, at(f))));
     // Its pieces as found: a gap in it (a label row across the columns) stays.
     const insidePieces = fadedPieces
-      .filter((p) =>
-        inside.some((f) => Math.abs(f.pos - p.pos) <= ALIGN && p.a <= f.b && f.a <= p.b),
-      )
-      .map(fit)
+      .flatMap((p) => {
+        const f = inside.find((f) => Math.abs(f.pos - p.pos) <= ALIGN && p.a <= f.b && f.a <= p.b);
+        return f ? [fit(p, at(f))] : [];
+      })
       .filter((p) => p.b > p.a);
     const grid = gridFor(raster, group, hs, [...pieces, ...insidePieces]);
     if (grid) grids.push(grid);
