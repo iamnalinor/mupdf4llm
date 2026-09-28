@@ -161,7 +161,7 @@ Documentation is built with [VitePress](https://vitepress.dev/) +
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push and PR. Steps:
+`.github/workflows/ci.yml` runs on pushes to `main` and on every PR. Steps:
 
 1. `bun install --frozen-lockfile`
 2. `bun run lint:check` — Prettier + ESLint + tsc
