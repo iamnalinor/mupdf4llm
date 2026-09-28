@@ -350,39 +350,6 @@ export class PageRaster {
     for (let i = 0; i < maxTrim && y1 - y0 > 2 && rowInk(y1 - 1) > 0.5; i++) y1--;
     for (let i = 0; i < maxTrim && x1 - x0 > 2 && colInk(x0) > 0.5; i++) x0++;
     for (let i = 0; i < maxTrim && x1 - x0 > 2 && colInk(x1 - 1) > 0.5; i++) x1--;
-    // A thin rule fed askew runs along the edge from top to bottom, a pixel
-    // column further in every few rows, so no single column is mostly ink.
-    // Its track — the first ink from the edge in each row — is present in
-    // nearly every row and nearly straight; text has blank rows between its
-    // lines and above and below them.
-    const reach = Math.ceil(this.scale * 3);
-    const track = (
-      from: number,
-      dir: 1 | -1,
-      lines: [number, number],
-      along: (l: number, i: number) => boolean,
-    ) => {
-      const pos: number[] = [];
-      for (let l = lines[0]; l < lines[1]; l++) {
-        for (let d = 0; d < reach; d++) {
-          if (along(l, from + dir * d)) {
-            pos.push(d);
-            break;
-          }
-        }
-      }
-      const n = lines[1] - lines[0];
-      if (pos.length < 0.9 * n || n < 3 * reach) return 0;
-      // Nearly straight: consecutive rows differ by at most a pixel or two.
-      for (let i = 1; i < pos.length; i++) if (Math.abs(pos[i]! - pos[i - 1]!) > 2) return 0;
-      return Math.max(...pos) + Math.ceil(this.scale);
-    };
-    const inkAt = (y: number, x: number) => ink(y * this.width + x);
-    const inkAtT = (x: number, y: number) => ink(y * this.width + x);
-    x0 += track(x0, 1, [y0, y1], inkAt);
-    x1 -= track(x1 - 1, -1, [y0, y1], inkAt);
-    y0 += track(y0, 1, [x0, x1], inkAtT);
-    y1 -= track(y1 - 1, -1, [x0, x1], inkAtT);
     if (x1 - x0 < 2 || y1 - y0 < 2) return null;
 
     let dark = 0;
