@@ -12,7 +12,7 @@ export type {
   CellSource,
   CellText,
 } from "./helpers/types";
-export type { OcrEngine, OcrImage } from "./helpers/ocr/engine";
+export type { OcrEngine, OcrImage, OcrResult } from "./helpers/ocr/engine";
 export {
   createRapidOcr,
   OcrSetupError,

@@ -120,7 +120,8 @@ async function run(outDir: string, args: string[]) {
   const lib = (await import(src)) as typeof import("../src/index");
   const ocr: OcrEngine = args.includes("--ocr")
     ? await lib.createRapidOcr()
-    : { recognize: async () => "ocr" };
+    : // Both sides of the 0.4 change: a string to older versions, { text } to newer.
+      { recognize: async () => Object.assign(new String("ocr"), { text: "ocr" }) };
   mkdirSync(outDir, { recursive: true });
   for (const e of entries()) {
     if (only && !e.name.includes(only)) continue;

@@ -2,7 +2,7 @@ import { test, expect, describe, spyOn } from "bun:test";
 import { readFileSync } from "node:fs";
 import * as mupdf from "mupdf";
 import { toMarkdown, toMarkdownPages, createRapidOcr, OcrSetupError, Rect } from "../src/index";
-import type { MarkdownOptions, OcrEngine, OcrImage } from "../src/index";
+import type { MarkdownOptions, OcrEngine, OcrImage, OcrResult } from "../src/index";
 import { PageRaster, grayImage } from "../src/helpers/ocr/engine";
 import { disposable } from "../src/helpers/ocr/rapidOcr";
 import { brokenFonts, fixHomoglyphs, looksBroken } from "../src/helpers/ocr/cellText";
@@ -20,13 +20,14 @@ import { degrade, type Degradation } from "./helpers/degrade";
 const fixture = (name: string) => new Uint8Array(readFileSync(`tests/fixtures/${name}`));
 
 /** Fake engine: answers "cell<n>" and records every image it was given. */
-function fakeEngine(answer?: (n: number) => string): OcrEngine & { calls: OcrImage[] } {
+function fakeEngine(answer?: (n: number) => string | OcrResult): OcrEngine & { calls: OcrImage[] } {
   const calls: OcrImage[] = [];
   return {
     calls,
     async recognize(img) {
       calls.push(img);
-      return answer ? answer(calls.length) : `cell${calls.length}`;
+      const a = answer ? answer(calls.length) : `cell${calls.length}`;
+      return typeof a === "string" ? { text: a } : a;
     },
   };
 }
@@ -56,10 +57,12 @@ test("await using disposes an engine made disposable, as createRapidOcr returns 
   let disposed = 0;
   {
     await using ocr = disposable({
-      recognize: async (_img: OcrImage) => "x",
+      recognize: async (_img: OcrImage) => ({ text: "x" }),
       dispose: async () => void disposed++,
     });
-    expect(await ocr.recognize(grayImage(new Uint8Array(1).fill(255), 1, 1))).toBe("x");
+    expect(await ocr.recognize(grayImage(new Uint8Array(1).fill(255), 1, 1))).toEqual({
+      text: "x",
+    });
     expect(disposed).toBe(0);
   }
   expect(disposed).toBe(1);
@@ -349,7 +352,7 @@ describe("pixels strategy on a scan", () => {
       async recognize() {
         n++;
         if (n % 2) throw new Error("boom");
-        return "";
+        return { text: "" };
       },
     };
     const [page] = await toMarkdownPages(fixture("scanned-grid.pdf"), {
@@ -504,6 +507,41 @@ test("OCR text of a cell gets its look-alike letters fixed", async () => {
     ocr: fakeEngine(() => "Мосkвa"),
   });
   expect(page!.tables[0]!.cells[0]![0]!.text).toBe("Москва");
+});
+
+describe("OCR confidence", () => {
+  test("a cell carries the confidence its engine gave", async () => {
+    const [page] = await toMarkdownPages(fixture("scanned-grid.pdf"), {
+      tableStrategy: "pixels",
+      ocr: fakeEngine((n) => ({ text: `cell${n}`, confidence: n / 100 })),
+    });
+    const cells = page!.tables[0]!.cells.flat();
+    expect(cells.every((c) => c?.source === "ocr")).toBe(true);
+    expect(cells.map((c) => c!.confidence)).toEqual(cells.map((_, i) => (i + 1) / 100));
+  });
+
+  test("a cell read line by line takes its least confident line", async () => {
+    // Calls alternate 0.9 and 0.3: two lines read one after the other
+    // always include a 0.3.
+    const [page] = await toMarkdownPages(fixture("scan-ru-census-1918.pdf"), {
+      tableStrategy: "pixels",
+      ocr: fakeEngine((n) => ({ text: "x", confidence: n % 2 ? 0.9 : 0.3 })),
+    });
+    const multi = page!.tables.flatMap((t) => t.cells.flat()).filter((c) => c?.text.includes("\n"));
+    expect(multi.length).toBeGreaterThan(0);
+    expect(multi.every((c) => c!.confidence === 0.3)).toBe(true);
+  });
+
+  test("no confidence from the engine, none on the cell; none on text-layer cells", async () => {
+    const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"), {
+      textSource: "auto",
+      ocr: fakeEngine(),
+    });
+    const cells = page!.tables[0]!.cells.flat();
+    expect(cells.some((c) => c?.source === "ocr")).toBe(true);
+    expect(cells.some((c) => c?.source === "pdf")).toBe(true);
+    expect(cells.every((c) => c && !("confidence" in c))).toBe(true);
+  });
 });
 
 describe("auto with a font whose codes are broken", () => {
@@ -764,7 +802,7 @@ describe("scans turned a quarter without /Rotate", () => {
       for (let y = 0; y < img.height; y++)
         for (let x = 0; x < img.width; x++)
           if (img.data[y * img.width + x]! < 128) y < img.height / 2 ? top++ : bottom++;
-      return top > bottom ? "word word word" : "' , . ı";
+      return { text: top > bottom ? "word word word" : "' , . ı" };
     },
   });
 
@@ -992,7 +1030,7 @@ describe("pixels strategy on real scans", () => {
         most = Math.max(most, ++running);
         await new Promise((r) => setTimeout(r, 1));
         running--;
-        return "a";
+        return { text: "a" };
       },
     };
     await toMarkdown(fixture("scan-ru-census-1918.pdf"), { tableStrategy: "pixels", ocr });

@@ -98,6 +98,12 @@ export type CellSource = "pdf" | "ocr" | "failed";
 export interface CellText {
   text: string;
   source: CellSource;
+  /**
+   * For OCR text, how sure the engine was, from 0 to 1: of a cell read
+   * line by line, its least sure line. Absent for text-layer cells and
+   * when the engine gives no confidence.
+   */
+  confidence?: number;
 }
 
 /** Where table cell text is taken from. See {@link MarkdownOptions.textSource}. */

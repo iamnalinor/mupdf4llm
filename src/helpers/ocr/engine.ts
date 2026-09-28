@@ -11,13 +11,24 @@ export interface OcrImage {
   png(): Uint8Array;
 }
 
+/** What an {@link OcrEngine} read in an image. */
+export interface OcrResult {
+  /** The text, lines separated by `\n`. */
+  text: string;
+  /**
+   * How sure the engine is of the text, from 0 to 1, for an engine that
+   * knows. Reported on the cell as `CellText.confidence`.
+   */
+  confidence?: number;
+}
+
 /**
  * Pluggable OCR backend. The library calls `recognize` once per table cell
- * and uses the returned text as the cell content (lines separated by `\n`).
- * An exception or an empty string marks the cell as `"failed"`.
+ * and uses the returned text as the cell content. An exception or empty
+ * text marks the cell as `"failed"`.
  */
 export interface OcrEngine {
-  recognize(image: OcrImage): Promise<string>;
+  recognize(image: OcrImage): Promise<OcrResult>;
   /** Release models and native resources. Called only for engines the library created itself. */
   dispose?(): Promise<void> | void;
 }

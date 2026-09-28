@@ -76,9 +76,11 @@ export async function createRapidOcr(
         // which similar cell crops can share.
         const res = await service.recognize(buf, { noCache: true });
         const text = String(res.text ?? "").trim();
-        if (text) return text;
+        if (!text) continue;
+        const confidence = leastSure(res);
+        return confidence === undefined ? { text } : { text, confidence };
       }
-      return "";
+      return { text: "" };
     },
     async dispose() {
       await service.destroy();
@@ -120,6 +122,23 @@ export function lazyEngine(create: () => Promise<OcrEngine>): OcrEngine {
       await e?.dispose?.();
     },
   };
+}
+
+/**
+ * The confidence of the least sure piece of text in a `ppu-paddle-ocr`
+ * result (`lines` of `{ text, confidence }`): one bad line makes the cell
+ * doubtful. Falls back to the result's overall confidence.
+ */
+function leastSure(res: {
+  lines?: { text?: unknown; confidence?: unknown }[][];
+  confidence?: unknown;
+}): number | undefined {
+  const known = (res.lines ?? [])
+    .flat()
+    .filter((item) => String(item.text ?? "").trim())
+    .flatMap((item) => (typeof item.confidence === "number" ? [item.confidence] : []));
+  if (known.length) return Math.min(...known);
+  return typeof res.confidence === "number" ? res.confidence : undefined;
 }
 
 /** Nearest-neighbour 2x enlargement. */

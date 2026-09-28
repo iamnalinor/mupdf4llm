@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-28
+
+### Changed
+
+- **Breaking:** `OcrEngine.recognize` returns `{ text, confidence? }`
+  (the new `OcrResult` type) instead of a string. A custom engine changes
+  `return text` to `return { text }`, adding `confidence` (0 to 1) when it
+  knows one.
+
+### Added
+
+- `confidence` on OCR cells in `PageChunk.tables[].cells`: how sure the
+  engine was, from 0 to 1; a cell read line by line gets its least sure
+  line's. The default engine reports PaddleOCR's confidence. Text-layer
+  cells, and cells from an engine that gives none, have no `confidence`.
+  The Markdown output is unchanged.
+
 ### Fixed
 
 - `"auto"` also treats a font as broken when it has at least 4 different
@@ -387,7 +404,8 @@ docs/                           VitePress + TypeDoc documentation site
 requirements.txt`. Tests `skipIf` Python or `pymupdf4llm` is
   missing so JS-only contributors can run `bun test` cleanly.
 
-[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/iamnalinor/mupdf4llm/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/iamnalinor/mupdf4llm/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.0...v0.2.1

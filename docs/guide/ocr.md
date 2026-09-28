@@ -148,7 +148,8 @@ const worker = await Tesseract.createWorker("rus+eng");
 const ocr: OcrEngine = {
   async recognize(img) {
     const { data } = await worker.recognize(Buffer.from(img.png()));
-    return data.text;
+    // Tesseract reports 0–100; the library expects 0–1.
+    return { text: data.text, confidence: data.confidence / 100 };
   },
 };
 await toMarkdown(buf, { tableStrategy: "pixels", ocr });
@@ -156,7 +157,9 @@ await toMarkdown(buf, { tableStrategy: "pixels", ocr });
 
 The image is one table cell: 8-bit grayscale (`img.data`, `img.width`,
 `img.height`) with a white margin, also available as PNG (`img.png()`).
-Return the text with lines separated by `\n`. Throw `OcrSetupError`
+Return `{ text, confidence? }`: the text with lines separated by `\n`,
+and, if the engine knows it, how sure it is from 0 to 1 (leave it out
+otherwise). Throw `OcrSetupError`
 (exported by the package) when the engine cannot work at all — a missing
 model, rejected credentials: it aborts the conversion. Any other error
 only marks that cell as `"failed"`. A multi-line cell whose
@@ -167,16 +170,23 @@ the library.
 
 ## Which cells came from OCR
 
-`toMarkdownPages` reports the text and source of every cell:
+`toMarkdownPages` reports the text and source of every cell, and for
+OCR text how sure the engine was:
 
 ```ts
 const [page] = await toMarkdownPages(buf, { textSource: "auto" });
 for (const row of page.tables[0].cells) {
   for (const cell of row) {
     if (cell) console.log(cell.source, cell.text); // "pdf" | "ocr" | "failed"
+    if (cell?.source === "ocr" && (cell.confidence ?? 1) < 0.8) console.log("check:", cell.text);
   }
 }
 ```
+
+`confidence` runs from 0 to 1. A cell read line by line gets its least
+sure line's. It is absent on text-layer cells and when the engine gives
+none. The default engine reports PaddleOCR's own confidence. What value
+is too low depends on the documents; the Markdown output does not use it.
 
 `null` marks a position covered by a merged cell. A cell is `"failed"`
 when the engine threw or returned nothing although the cell holds ink;

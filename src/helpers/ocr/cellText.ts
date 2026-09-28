@@ -1,6 +1,6 @@
 import { Rect } from "../geometry";
 import type { Block, TableData, TextSource } from "../types";
-import type { OcrEngine, OcrImage, PageRaster } from "./engine";
+import type { OcrEngine, OcrImage, OcrResult, PageRaster } from "./engine";
 import { OcrSetupError } from "./rapidOcr";
 
 const BROKEN_CHAR = /[\uFFFD\uE000-\uF8FF\u0000-\u0008\u000E-\u001F]/u;
@@ -208,37 +208,53 @@ async function ocrCells(
             tab.setCellText(r, c, { text: "", source: "ocr" });
           continue;
         }
-        const read = async (img: OcrImage) => {
+        const read = async (img: OcrImage): Promise<OcrResult> => {
           try {
-            return (await engine.recognize(img)).trim();
+            const res = await engine.recognize(img);
+            return { ...res, text: res.text.trim() };
           } catch (e) {
             // A missing OCR package is a configuration error, not a bad cell.
             if (e instanceof OcrSetupError) throw e;
             if (typeof process !== "undefined" && process.env?.DEBUG_MUPDF4LLM)
               console.error(`[mupdf4llm] OCR failed for cell ${r},${c}:`, e);
-            return "";
+            return { text: "" };
           }
         };
-        let text = await read(whole);
+        let res = await read(whole);
+        const count = (text: string) => text.split("\n").filter(Boolean).length;
         // A detector can drop a short line from a multi-line cell; then
         // recognise the cell line by line.
         const lines = getRaster().cropLines(Rect.from(cell));
-        if (lines.length > 1 && text.split("\n").filter(Boolean).length < lines.length) {
+        if (lines.length > 1 && count(res.text) < lines.length) {
           // One call at a time: engines may not handle parallel requests.
-          const perLine: string[] = [];
+          const perLine: OcrResult[] = [];
           for (const img of lines) {
-            const t = await read(img);
-            if (t) perLine.push(t);
+            const line = await read(img);
+            if (line.text) perLine.push(line);
           }
-          if (perLine.length > text.split("\n").filter(Boolean).length) text = perLine.join("\n");
+          if (perLine.length > count(res.text)) res = joinLines(perLine);
         }
         // Only dots read (an empty value) is a result; nothing read is a
         // failure. Under "auto" a failed cell keeps its text-layer text.
-        if (text) tab.setCellText(r, c, { text: fixHomoglyphs(stripLeaders(text)), source: "ocr" });
-        else tab.setCellText(r, c, { text: texts ? texts[r]![c]!.text : "", source: "failed" });
+        if (res.text) {
+          const text = fixHomoglyphs(stripLeaders(res.text));
+          const { confidence } = res;
+          tab.setCellText(r, c, {
+            text,
+            source: "ocr",
+            ...(confidence !== undefined && { confidence }),
+          });
+        } else tab.setCellText(r, c, { text: texts ? texts[r]![c]!.text : "", source: "failed" });
       }
     }
   }
+}
+
+/** Lines read one by one, as one result: the least sure line sets the confidence. */
+function joinLines(lines: OcrResult[]): OcrResult {
+  const known = lines.flatMap((l) => (l.confidence === undefined ? [] : [l.confidence]));
+  const text = lines.map((l) => l.text).join("\n");
+  return known.length ? { text, confidence: Math.min(...known) } : { text };
 }
 
 /**

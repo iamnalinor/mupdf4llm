@@ -78,7 +78,7 @@ const chunks = await toMarkdownPages(buf);
 for (const c of chunks) {
   for (const t of c.tables) {
     console.log(t.bbox, t.rows, t.columns);
-    console.log(t.cells); // [row][col] → { text, source: "pdf" | "ocr" | "failed" } | null
+    console.log(t.cells); // [row][col] → { text, source: "pdf" | "ocr" | "failed", confidence? } | null
   }
 }
 ```
