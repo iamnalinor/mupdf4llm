@@ -266,11 +266,22 @@ export function findPixelGrids(raster: PageRaster): RuledGrid[] {
   const grids: RuledGrid[] = [];
   for (const group of groupColumns(vs)) {
     const inside = fadedInside(group, faded);
-    group.push(...inside);
+    // A faded rule next to a rule of the group completes it, at its place:
+    // a faint halo is wider than the dark stroke and would move the border.
+    // It does not move the table's top or bottom either.
+    const xs = positions(group, MIN_COL);
+    const at = (x: number) => xs.find((p) => Math.abs(p - x) <= MIN_COL) ?? x;
+    const lo = Math.min(...group.map((v) => v.a));
+    const hi = Math.max(...group.map((v) => v.b));
+    const fit = (f: Seg) => ({ pos: at(f.pos), a: Math.max(f.a, lo), b: Math.min(f.b, hi) });
+    group.push(...inside.map(fit));
     // Its pieces as found: a gap in it (a label row across the columns) stays.
-    const insidePieces = fadedPieces.filter((p) =>
-      inside.some((f) => Math.abs(f.pos - p.pos) <= ALIGN && p.a <= f.b && f.a <= p.b),
-    );
+    const insidePieces = fadedPieces
+      .filter((p) =>
+        inside.some((f) => Math.abs(f.pos - p.pos) <= ALIGN && p.a <= f.b && f.a <= p.b),
+      )
+      .map(fit)
+      .filter((p) => p.b > p.a);
     const grid = gridFor(raster, group, hs, [...pieces, ...insidePieces]);
     if (grid) grids.push(grid);
   }
@@ -282,8 +293,7 @@ const FADED_COVER = 0.8;
 
 /**
  * The faded rules that divide the table of `group`: between its outer
- * rules and running down most of its height. One next to a rule of the
- * group completes it where only a piece was dark enough to be found.
+ * rules and running down most of its height.
  */
 function fadedInside(group: Seg[], faded: Seg[]): Seg[] {
   const xs = positions(group, MIN_COL);

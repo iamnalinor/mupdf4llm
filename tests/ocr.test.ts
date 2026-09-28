@@ -162,6 +162,25 @@ describe("detectRulings", () => {
     expect(done.reduce((n, v) => n + v.y1 - v.y0, 0)).toBeGreaterThan(190);
   });
 
+  test("a faint halo along a dark rule moves no border of the table", () => {
+    const grid = (halo: boolean) => {
+      const { data, fill } = raster();
+      fill(50, 50, 550, 52);
+      fill(50, 350, 550, 352);
+      fill(50, 50, 52, 352);
+      fill(548, 50, 550, 352);
+      fill(299, 50, 301, 352); // inner v rule, dark
+      if (halo) fill(296, 44, 299, 358, 205); // its halo, longer and to the left
+      for (let y = 56; y < 340; y += 12) fill(200, y, 290, y + 8);
+      const [g] = findPixelGrids(new PageRaster(data, W, H, 1.5));
+      return {
+        xs: [...new Set(g!.vLines.map((v) => v.x))].sort((a, b) => a - b),
+        ys: g!.hLines.map((h) => h.y),
+      };
+    };
+    expect(grid(true)).toEqual(grid(false));
+  });
+
   test("columnLean: the lean column rules share, none when they fan out", () => {
     const rules = (leans: number[]) => {
       const { data, fill } = raster();
