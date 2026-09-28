@@ -18,8 +18,8 @@ const md = await toMarkdown(buf, { tableStrategy: "pixels" });
 
 The page is rendered at `ocrDpi` (default 300) and the table is read off
 the pixels, so it works when the page is one scanned image with no text
-and no vector graphics. `"pixels"` implies `textSource: "ocr"`: every cell
-is cropped from the rendered page and recognised on its own, which is much
+and no vector graphics. On a page without a text layer every cell is
+cropped from the rendered page and recognised on its own, which is much
 more accurate than OCR of the whole page fitted into the grid afterwards.
 
 What it handles, as found in real printed tables:
@@ -37,15 +37,19 @@ What it handles, as found in real printed tables:
   (dropped before OCR), show-through from the back of the page, broken
   thin rules, and pages fed askew up to 3° (the page is deskewed first).
 - **Leader dots** ("Total ........ 1900") are removed from cell text.
+- **Latin look-alikes** the engine mixes into Cyrillic ("Мосkвa",
+  "Kлaсс", "АHHа") are put back as Cyrillic letters; Latin words and
+  words with Latin letters that have no Cyrillic twin stay as read.
 
 Not handled yet: tables without any vertical rules (borderless), text
 set vertically in the header (it is recognised as noise or skipped).
 A heading set in the first column only ("Northern region") directly
 above data rows is joined to the next row like a wrapped label.
 
-On a page scanned askew, deskewing is only done with `textSource: "ocr"`
-(the default for `"pixels"`): with `"pdf"` or `"auto"` the grid must stay
-in the coordinates of the PDF's text layer.
+A page scanned askew is deskewed when all cell text comes from OCR:
+with `textSource: "ocr"`, and with `"auto"` (the default) on a page
+without a text layer. Otherwise the grid must stay in the coordinates of
+the PDF's text layer.
 
 ### Accuracy
 
@@ -74,16 +78,17 @@ grid and OCR only the text:
 await toMarkdown(buf, { textSource: "ocr" }); // grid from lines_strict, text from OCR
 ```
 
-- `"pdf"` — the PDF text layer. Default for every strategy except
-  `"pixels"`; never runs OCR.
-- `"ocr"` — every cell is OCR'd; the text layer is ignored. Default for
-  `"pixels"`.
-- `"auto"` — the text layer, and OCR only for cells whose text is empty
+- `"pdf"` — the PDF text layer; never runs OCR.
+- `"ocr"` — every cell is OCR'd; the text layer is ignored.
+- `"auto"` (default) — the text layer, and OCR only for cells whose text is empty
   or looks broken: replacement (`U+FFFD`), private-use or control
   characters, a letter of another script slipped into a word (a Latin
   "c" in "Иcтория" reads right but breaks search; whole pieces like
   "ITотдел" are fine), or text of 4+ characters that
-  is mostly neither letters nor digits. A wrong encoding that still produces letters (Latin
+  is mostly neither letters nor digits. When some text of a font has
+  such characters, every cell set in that font is OCR'd: a font embedded
+  without a `ToUnicode` map often yields control characters for its first
+  glyphs and printable gibberish (`DE=BA`) for the rest. A wrong encoding that still produces letters (Latin
   gibberish instead of Cyrillic) is **not** detected — use `"ocr"` for
   such documents.
 
@@ -103,7 +108,9 @@ npm install ppu-paddle-ocr onnxruntime-node
 The CPU build of ONNX Runtime ships inside the package; if its
 postinstall script fails behind a proxy, `--ignore-scripts` is safe.
 Nothing is loaded unless a cell actually needs OCR. If the packages are
-missing, the call rejects with the install command above. Models (about
+missing, the call rejects with the install command above — except under
+the default `textSource`, where the text layer is kept as it is; only a
+scan without one read with `"pixels"` still needs the packages. Models (about
 13 MB) are downloaded and cached on first use.
 
 The default model is `v5-cyrillic-mobile` (Cyrillic and Latin script:

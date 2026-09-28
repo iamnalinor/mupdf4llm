@@ -52,6 +52,7 @@ interface CharData {
   origin: [number, number];
   bbox: BBox;
   font: mupdf.Font;
+  fontId: number;
   size: number;
   color: number[];
 }
@@ -119,7 +120,7 @@ function buildSpan(chars: CharData[]): Span {
     ascender: 0.8,
     descender: -0.2,
     origin: first.origin,
-    chars: chars.map((c) => ({ c: c.c, bbox: c.bbox })),
+    chars: chars.map((c) => ({ c: c.c, bbox: c.bbox, fontId: c.fontId })),
   };
 }
 
@@ -160,6 +161,14 @@ export function extractTextDict(page: mupdf.Page, opts: TextPageOpts = {}): Text
   let curLineChars: CharData[] | null = null;
   let curLine: { bbox: BBox; dir: [number, number]; wmode: number } | null = null;
 
+  // Font instances of this page, numbered in order of first use.
+  const fontIds = new Map<number, number>();
+  const fontIdOf = (font: mupdf.Font) => {
+    const key = (font as unknown as { pointer: number }).pointer;
+    let id = fontIds.get(key);
+    if (id === undefined) fontIds.set(key, (id = fontIds.size));
+    return id;
+  };
   stext.walk({
     beginTextBlock(bbox) {
       curBlock = { bbox: [...bbox] as BBox, lines: [] };
@@ -194,6 +203,7 @@ export function extractTextDict(page: mupdf.Page, opts: TextPageOpts = {}): Text
           origin: [origin[0]!, origin[1]!],
           bbox: quadToBBox(quad as unknown as number[]),
           font,
+          fontId: fontIdOf(font),
           size,
           color: [...(color as unknown as number[])],
         });

@@ -13,6 +13,7 @@ import { PageRaster } from "./ocr/engine";
 import { createRapidOcr, lazyEngine } from "./ocr/rapidOcr";
 import { ocrTableCells } from "./ocr/cellText";
 import { removeRotation } from "./layout/pageRotation";
+import { applyQuarterTurn, scanTurn, upsideDown } from "./layout/scanOrientation";
 import { ProgressBar } from "./progress";
 import { renderPageImage, dedupeImages } from "./images/imageExtract";
 import { extractWords } from "./text/extractWords";
@@ -27,6 +28,14 @@ import type {
   TableData,
 } from "./types";
 import type { OcrEngine } from "./ocr/engine";
+import type { Block } from "./types";
+
+/** Does the page have text in its PDF text layer (not a bare scan)? */
+export function hasTextLayer(blocks: Block[]): boolean {
+  return blocks.some(
+    (b) => b.type === 0 && b.lines.some((l) => l.spans.some((s) => s.text.trim())),
+  );
+}
 
 interface PageParams {
   page: mupdf.PDFPage;
@@ -375,7 +384,7 @@ async function convert(
   // paragraph stream instead of being dropped.
   const detectTables = opts.tableStrategy !== null && isEl("table");
   const strategy = opts.tableStrategy ?? "lines_strict";
-  const textSource = opts.textSource ?? (strategy === "pixels" ? "ocr" : "pdf");
+  const textSource = opts.textSource ?? "auto";
   const ocrDpi = opts.ocrDpi ?? 300;
 
   if (!writeImages && !embedImages && !forceText) {
@@ -430,6 +439,17 @@ async function convert(
     // remove_rotation bakes a derotation matrix into the content stream and
     // remaps the page boxes; reload so getBounds() reflects the new page box.
     if (prevRotation !== 0) page = doc.loadPage(pno) as mupdf.PDFPage;
+    // A scan fed sideways, with no /Rotate to set it right: turn it before
+    // the grid is read off its pixels.
+    if (detectTables && strategy === "pixels" && opts.detectOrientation !== false) {
+      if (scanTurn(page)) {
+        page = applyQuarterTurn(doc, pno, 90);
+        // A quarter turn either way looks the same to the ink; the text
+        // tells which way is up, when it is going to be read anyway.
+        if (textSource !== "pdf" && (await upsideDown(PageRaster.render(page, 150), ocr)))
+          page = applyQuarterTurn(doc, pno, 180);
+      }
+    }
     {
       const rectBounds = page.getBounds();
       const pageRect = new Rect(rectBounds[0], rectBounds[1], rectBounds[2], rectBounds[3]);
@@ -462,7 +482,8 @@ async function convert(
             // text layer stays in the page's own (skewed) coordinates.
             if (pixels) {
               raster = PageRaster.render(page, ocrDpi);
-              if (textSource === "ocr") raster = raster.deskewed();
+              if (textSource === "ocr" || (textSource === "auto" && !hasTextLayer(td.blocks)))
+                raster = raster.deskewed();
             }
             tabs = raster
               ? tablesFromGrids(td.blocks, findPixelGrids(raster))
@@ -503,8 +524,13 @@ async function convert(
       }
 
       if (tabs.length && textSource !== "pdf") {
-        raster ??= PageRaster.render(page, ocrDpi);
-        await ocrTableCells(tabs, textSource, raster, ocr);
+        // The default "auto" only repairs the text layer: without an OCR
+        // engine it keeps that layer, as "pdf" (the old default) did. Only a
+        // scan read with "pixels" (whose old default was "ocr") needs OCR.
+        const keepLayer = opts.textSource === undefined && (!pixels || hasTextLayer(td.blocks));
+        // Rendered only when a cell turns out to need OCR.
+        const getRaster = () => (raster ??= PageRaster.render(page, ocrDpi));
+        await ocrTableCells(tabs, textSource, getRaster, ocr, { blocks: td.blocks, keepLayer });
       }
 
       const parms: PageParams = {

@@ -448,6 +448,151 @@ function brokenTextGrid() {
   console.log(`wrote ${OUT}/broken-text-grid.pdf`);
 }
 
+/**
+ * Two tables on one page. The first is set in a Type3 font without a
+ * ToUnicode map whose glyphs are numbered in order of first use (1, 2, 3,
+ * ...), as some PDF printers embed fonts: the text layer holds the glyph
+ * numbers. The heading above the table uses up the first 31 glyphs, which
+ * come out as control characters; every cell of the table is printable
+ * ASCII gibberish. The second table is in Helvetica and reads fine.
+ */
+function type3NoUnicodeGrid() {
+  const doc = new mupdf.PDFDocument();
+  const good = doc.addSimpleFont(new mupdf.Font("Helvetica"));
+  const rows = [
+    ["Code", "Placeholder name", "Group", "Points"],
+    ["1", "Quartz Jumping Fox", "Alpha", "12,50"],
+    ["2", "Brisk Violet Wyvern", "Delta", "87,25"],
+    ["3", "Hazy Mellow Kite", "Sigma", "40,75"],
+    ["4", "Oblique Pixel Dune", "Omega", "63,00"],
+  ];
+  const heading = "#$%&*+-/:;<=>?@[]^_{|}~!EILNRTUXYZ";
+  // Glyph numbers by first use; each glyph is drawn as a plain bar.
+  const codes = new Map<string, number>();
+  for (const ch of heading + rows.flat().join(""))
+    if (!codes.has(ch)) codes.set(ch, codes.size + 1);
+  const procs = doc.newDictionary();
+  const diffs = doc.newArray();
+  diffs.push(doc.newInteger(1));
+  for (const [ch, n] of codes) {
+    const h = ch === " " ? 0 : /[a-z]/.test(ch) ? 500 : 700;
+    const draw = h ? `60 0 440 ${h} re f` : "";
+    procs.put(String(n), doc.addStream(`600 0 0 0 600 ${h || 1} d1 ${draw}`, {}));
+    diffs.push(doc.newName(String(n)));
+  }
+  const n = codes.size;
+  const encoding = doc.newDictionary();
+  encoding.put("Type", doc.newName("Encoding"));
+  encoding.put("Differences", diffs);
+  const t3 = doc.addObject({
+    Type: doc.newName("Font"),
+    Subtype: doc.newName("Type3"),
+    FontBBox: [0, 0, 600, 700],
+    FontMatrix: [0.001, 0, 0, 0.001, 0, 0],
+    CharProcs: procs,
+    Encoding: encoding,
+    FirstChar: 1,
+    LastChar: n,
+    Widths: Array.from({ length: n }, () => 600),
+    Resources: doc.newDictionary(),
+  });
+  const hex = (s: string) =>
+    [...s].map((ch) => codes.get(ch)!.toString(16).padStart(2, "0")).join("");
+  const cols = [60, 110, 300, 400, 520];
+  const ROW = 24;
+  const table = (top: number, font: string) => {
+    let c = "0 G 1 w\n";
+    for (let r = 0; r <= rows.length; r++)
+      c += `${cols[0]} ${top - r * ROW} m ${cols.at(-1)} ${top - r * ROW} l S\n`;
+    for (const x of cols) c += `${x} ${top} m ${x} ${top - rows.length * ROW} l S\n`;
+    rows.forEach((row, r) =>
+      row.forEach((v, k) => {
+        const s = font === "F2" ? `<${hex(v)}>` : `(${v})`;
+        c += `BT /${font} 11 Tf ${cols[k]! + 6} ${top - r * ROW - 16} Td ${s} Tj ET\n`;
+      }),
+    );
+    return c;
+  };
+  const resources = doc.addObject({ Font: { F1: good, F2: t3 } });
+  const content =
+    `BT /F2 11 Tf 60 790 Td <${hex(heading)}> Tj ET\n` + table(760, "F2") + table(560, "F1");
+  doc.insertPage(-1, doc.addPage([0, 0, W, H], 0, resources, content));
+  writeFileSync(`${OUT}/type3-no-tounicode-grid.pdf`, doc.saveToBuffer("compress").asUint8Array());
+  console.log(`wrote ${OUT}/type3-no-tounicode-grid.pdf`);
+}
+
+/**
+ * A healthy font with one bad entry: its ToUnicode map sends only the
+ * footnote mark "*" to the Private Use Area, as fonts often do for a symbol
+ * or two. The rest of its text, in the table and in the footnote, is fine.
+ */
+function footnoteMarksGrid() {
+  const doc = new mupdf.PDFDocument();
+  const cmap =
+    "/CIDInit /ProcSet findresource begin 12 dict begin begincmap " +
+    "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def " +
+    "/CMapName /Marks def /CMapType 2 def 1 begincodespacerange <00> <FF> endcodespacerange " +
+    "3 beginbfrange <20> <29> <0020> <2A> <2A> <E000> <2B> <7E> <002B> endbfrange endcmap " +
+    "CMapName currentdict /CMap defineresource pop end end";
+  const font = doc.addObject({
+    Type: "Font",
+    Subtype: "Type1",
+    BaseFont: "Helvetica",
+    Encoding: "WinAnsiEncoding",
+    ToUnicode: doc.addStream(cmap, {}),
+  });
+  const resources = doc.addObject({ Font: { F1: font } });
+  const content =
+    plainGridContent()
+      .replace("(North)", "(North*)")
+      .replace("(East)", "(East*)")
+      .replace("(West)", "(West*)") +
+    text(60, 620, "* Placeholder footnote: the marked regions were counted twice.", 10);
+  doc.insertPage(-1, doc.addPage([0, 0, W, H], 0, resources, content));
+  writeFileSync(`${OUT}/footnote-marks-grid.pdf`, doc.saveToBuffer("compress").asUint8Array());
+  console.log(`wrote ${OUT}/footnote-marks-grid.pdf`);
+}
+
+/**
+ * A table whose rows are all ruled, with a section label on a row of its
+ * own that spans the whole width: the column rules stop above and below it.
+ * The label row is barely taller than the text, so the rules on either side
+ * nearly meet across it.
+ */
+function mergedRowGrid() {
+  const cols = [50, 90, 200, 330, 450, 545];
+  const header = ["No", "Name", "Region", "Group", "Points"];
+  const body = (n: number) => [
+    String(n),
+    `Person ${n}`,
+    ["North", "South"][n % 2]!,
+    "A",
+    String(90 - n),
+  ];
+  type Row = { h: number; cells?: string[]; label?: string };
+  const rows: Row[] = [{ h: 18, cells: header }];
+  for (let n = 1; n <= 4; n++) rows.push({ h: 18, cells: body(n) });
+  rows.push({ h: 12, label: "Section B: placeholder heading across columns" });
+  for (let n = 5; n <= 8; n++) rows.push({ h: 18, cells: body(n) });
+
+  let c = "0 G 0.8 w\n";
+  let y = 780;
+  const x0 = cols[0]!;
+  const x1 = cols.at(-1)!;
+  c += `${x0} ${y} m ${x1} ${y} l S\n`;
+  for (const row of rows) {
+    const y1 = y - row.h;
+    c += `${x0} ${y1} m ${x1} ${y1} l S\n`;
+    c += `${x0} ${y} m ${x0} ${y1} l S ${x1} ${y} m ${x1} ${y1} l S\n`;
+    if (row.cells) {
+      for (const x of cols.slice(1, -1)) c += `${x} ${y} m ${x} ${y1} l S\n`;
+      row.cells.forEach((v, k) => (c += text(cols[k]! + 4, y1 + 5, v)));
+    } else c += text(210, y1 + 3, row.label!, 8);
+    y = y1;
+  }
+  save("merged-row-grid.pdf", [{ content: c }]);
+}
+
 const all: Record<string, () => void> = {
   compoundStrokeGrid,
   compoundFillGrid,
@@ -459,6 +604,9 @@ const all: Record<string, () => void> = {
   splitLineRows,
   scannedGrid,
   brokenTextGrid,
+  type3NoUnicodeGrid,
+  footnoteMarksGrid,
+  mergedRowGrid,
 };
 const only = process.argv.slice(2);
 for (const [name, make] of Object.entries(all)) if (!only.length || only.includes(name)) make();

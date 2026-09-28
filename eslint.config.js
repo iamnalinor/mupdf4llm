@@ -4,7 +4,15 @@ import prettier from "eslint-config-prettier";
 
 export default [
   {
-    ignores: ["dist/**", "node_modules/**", "tests/fixtures/**", "*.config.js", "docs/**"],
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      "tests/fixtures/**",
+      "*.config.js",
+      "docs/**",
+      ".corpus/**",
+      ".superpowers/**",
+    ],
   },
   {
     files: ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"],

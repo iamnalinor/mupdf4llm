@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-28
+
+### Changed
+
+- `textSource` defaults to `"auto"` for every table strategy (it was
+  `"ocr"` for `"pixels"` and `"pdf"` otherwise): the text layer is kept
+  and only cells whose text is missing or broken are OCR'd; on a page
+  without a text layer that is every cell. Left at the default, the text
+  layer is kept when no OCR engine can be set up (only a scan without one,
+  read with `"pixels"`, still needs it). With `"pixels"`, a scan that
+  carries an OCR text layer of its own now keeps that text and is not
+  deskewed; pass `textSource: "ocr"` for the old behaviour.
+
+### Added
+
+- `detectOrientation` (default `true`): with `tableStrategy: "pixels"`, a
+  page without a text layer whose lines run vertically — a sheet scanned
+  sideways, with no `/Rotate` to set it right — is turned before its
+  tables are read. The axis comes from where each letter's nearest
+  neighbour is; which way up, from OCR of a few lines read both ways.
+  Checked on 80 pages of public-domain statistical yearbooks: 16 of 18
+  pages printed across were found, no upright page was turned.
+- `scripts/corpus.ts` and `scripts/corpus.json`: an evaluation corpus of
+  public pages with tables, and a before/after comparison of two versions
+  (see CONTRIBUTING).
+
+### Fixed
+
+- `"auto"` OCRs every cell set in a font with a fair share of broken
+  characters (at least 3, and 5% of its text): a font embedded without a
+  ToUnicode map yields control characters for its first glyphs and
+  printable gibberish for the rest, which passed for text.
+- `"auto"` deskews a page without a text layer, as `"ocr"` does; on a page
+  fed askew it read worse than `"ocr"`.
+- `"pixels"`: a label row spanning the columns is one merged cell. Column
+  rules were carried across a row barely taller than its text, and the
+  label was cut into cells.
+- OCR text: Latin look-alikes mixed into Cyrillic words (`Мосkвa`,
+  `Kлaсс`, `АHHа`) are put back as Cyrillic letters.
+
 ## [0.3.0] - 2026-09-27
 
 ### Changed (breaking)
@@ -320,7 +360,8 @@ docs/                           VitePress + TypeDoc documentation site
 requirements.txt`. Tests `skipIf` Python or `pymupdf4llm` is
   missing so JS-only contributors can run `bun test` cleanly.
 
-[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/iamnalinor/mupdf4llm/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/iamnalinor/mupdf4llm/compare/v0.1.2...v0.2.0

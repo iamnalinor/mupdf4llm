@@ -33,7 +33,13 @@ identifier `b32182661_0003` (Public Domain Mark); `scan-ru-census-1918.pdf`
 and `scan-ru-prose-1918.pdf` — «Всероссийская промышленная и
 профессиональная перепись 1918 года», ЦСУ, 1920, identifier
 `vserossijskajapromyshlennajaiprofessiona91` (a state publication without
-personal authors, over 100 years old). Only add scans whose public-domain
+personal authors, over 100 years old); `scan-in-abstract-1901-table.pdf` —
+Statistical Abstract relating to British India, HMSO, London, 1901,
+identifier `india.history.resource.108757`; `scan-us-abstract-1909-sideways.pdf`
+— Statistical abstract of foreign countries, Government Printing Office,
+Washington, 1909 (a work of the US government), identifier
+`cu31924030388791`. `scripts/make-scan-fixtures.ts` rebuilds the last two
+from the archive's page images. Only add scans whose public-domain
 status is clear. `tests/helpers/degrade.ts` makes worse copies of them
 (skew, noise, specks, low resolution) for the robustness tests.
 
@@ -116,6 +122,28 @@ when in doubt, add a fixture to `tests/fixtures.test.ts` — the
 4. Update the relevant guide page under `docs/guide/` (or add one).
 5. Run `bun run lint` to format, `bun test` to verify, `bun run docs:build`
    to confirm the docs site still builds.
+
+## Checking a change on real documents
+
+A fixture proves that a change fixes the case it was made for; it does not
+show what the change does to other documents. Changes to table detection,
+page orientation or OCR are checked on an evaluation corpus as well:
+`scripts/corpus.json` lists public pages with tables (scans of statistical
+yearbooks from the Internet Archive, US federal reports), and every PDF in
+`tests/fixtures` is included too. Only links and checksums are kept in the
+repository; the files are downloaded to `.corpus/`.
+
+```sh
+git worktree add .corpus/base main       # the version to compare against
+bun scripts/corpus.ts run .corpus/before --src .corpus/base/src/index.ts
+bun scripts/corpus.ts run .corpus/after
+bun scripts/corpus.ts compare .corpus/before .corpus/after
+```
+
+`compare` lists every page whose tables changed shape or text. Look at
+those pages: keep a heuristic only if what changes is better, and if it
+changes nothing else. Add `--ocr` to `run` to use the real OCR engine
+(much slower).
 
 ## Documentation
 

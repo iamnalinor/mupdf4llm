@@ -1,12 +1,13 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, spyOn } from "bun:test";
 import { readFileSync } from "node:fs";
 import * as mupdf from "mupdf";
 import { toMarkdown, toMarkdownPages, createRapidOcr, OcrSetupError, Rect } from "../src/index";
-import type { OcrEngine, OcrImage } from "../src/index";
+import type { MarkdownOptions, OcrEngine, OcrImage } from "../src/index";
 import { PageRaster, grayImage } from "../src/helpers/ocr/engine";
 import { disposable } from "../src/helpers/ocr/rapidOcr";
-import { looksBroken } from "../src/helpers/ocr/cellText";
+import { fixHomoglyphs, looksBroken } from "../src/helpers/ocr/cellText";
 import { detectRulings, rowBreaks } from "../src/helpers/tables/pixelGrid";
+import { inkAxis, textPlausibility, upsideDown } from "../src/helpers/layout/scanOrientation";
 import { degrade, type Degradation } from "./helpers/degrade";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(`tests/fixtures/${name}`));
@@ -165,6 +166,35 @@ test("looksBroken: a stray letter of another script inside a word", () => {
   expect(looksBroken("Gr\u00f6\u00dfe na\u00efve")).toBe(false);
 });
 
+test("fixHomoglyphs: Latin look-alikes in Cyrillic OCR text", () => {
+  expect(fixHomoglyphs("Мосkвa")).toBe("Москва");
+  expect(fixHomoglyphs("Moсkвa")).toBe("Москва");
+  expect(fixHomoglyphs("Kлaсс обучения")).toBe("Класс обучения");
+  expect(fixHomoglyphs("Анна АHHа")).toBe("Анна Анна");
+  expect(fixHomoglyphs("Николаев CaBBa Дмитриевич")).toBe("Николаев Савва Дмитриевич");
+  expect(fixHomoglyphs("Poмaнoвич")).toBe("Романович");
+  expect(fixHomoglyphs("г. Мосkвa\nул. Tвepскaя")).toBe("г. Москва\nул. Тверская");
+  // Left alone: real Latin, words mixed on purpose, letters without a twin.
+  for (const t of [
+    "IT-отдел",
+    "iPhone",
+    "PP-OCRv5",
+    "Total population",
+    "CaBBa",
+    "Team CaBBa",
+    "Dmitrievich",
+    "Archiaров",
+    "ЦСУ РСФСР",
+    "Москва о Москве",
+    "Принтер HP",
+    "Модель ABC",
+    "Формат TEXT",
+    "Код PC",
+    "группа A",
+  ])
+    expect(fixHomoglyphs(t)).toBe(t);
+});
+
 test("looksBroken", () => {
   const pua = String.fromCharCode(0xe021, 0xe04e, 0xe06f);
   expect(looksBroken("")).toBe(true);
@@ -206,6 +236,19 @@ describe("pixels strategy on a scan", () => {
     expect(Math.abs(t.bbox[2] - 520)).toBeLessThan(1.5);
   });
 
+  test("auto deskews a page without a text layer, as ocr does", async () => {
+    const buf = degrade(fixture("scan-ru-census-1918.pdf"), { deg: 1.5 });
+    const crops = async (textSource: "auto" | "ocr") => {
+      const ocr = fakeEngine();
+      const pages = await toMarkdownPages(buf, { tableStrategy: "pixels", textSource, ocr });
+      return {
+        shapes: pages.flatMap((p) => p.tables.map((t) => [t.rows, t.columns])),
+        sizes: ocr.calls.map((i) => `${i.width}x${i.height}`),
+      };
+    };
+    expect(await crops("auto")).toEqual(await crops("ocr"));
+  }, 60_000);
+
   test("a failing engine marks cells as failed and keeps going", async () => {
     let n = 0;
     const ocr: OcrEngine = {
@@ -239,12 +282,72 @@ describe("pixels strategy on a scan", () => {
 describe("textSource on a vector grid with a broken text layer", () => {
   const pua = /[\uE000-\uF8FF]/u;
 
-  test('"pdf" (default) keeps the text layer', async () => {
-    const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"));
+  test('"pdf" keeps the text layer', async () => {
+    const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"), { textSource: "pdf" });
     const t = page!.tables[0]!;
     expect(t.cells[0]!.map((c) => c!.text)).toEqual(["No", "Region", "Count", "Share"]);
     expect(pua.test(t.cells[1]![1]!.text)).toBe(true);
     expect(t.cells.flat().every((c) => c?.source === "pdf")).toBe(true);
+  });
+
+  test("the default is auto: only the broken cells are OCRed", async () => {
+    const ocr = fakeEngine();
+    const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"), { ocr });
+    expect(ocr.calls.length).toBe(16);
+    expect(page!.tables[0]!.cells[0]!.map((c) => c!.source)).toEqual(["pdf", "pdf", "pdf", "pdf"]);
+    expect(pua.test(page!.text)).toBe(false);
+  });
+
+  test("the default auto keeps the text layer when OCR cannot be set up", async () => {
+    const ocr: OcrEngine = {
+      async recognize() {
+        throw new OcrSetupError("no models");
+      },
+    };
+    const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"), { ocr });
+    const t = page!.tables[0]!;
+    expect(t.cells[0]!.map((c) => c!.text)).toEqual(["No", "Region", "Count", "Share"]);
+    expect(t.cells.flat().every((c) => c?.source === "pdf")).toBe(true);
+  });
+
+  test("the default never raises for a vector table without a text layer", async () => {
+    // A ruled grid whose "text" is drawn as filled shapes (outlined glyphs).
+    const doc = new mupdf.PDFDocument();
+    let c = "0 G 1 w\n";
+    for (let r = 0; r <= 3; r++) c += `60 ${760 - r * 24} m 360 ${760 - r * 24} l S\n`;
+    for (const x of [60, 160, 260, 360]) c += `${x} 760 m ${x} 688 l S\n`;
+    for (let r = 0; r < 3; r++)
+      for (const x of [66, 166, 266]) c += `${x} ${744 - r * 24} 40 8 re f\n`;
+    doc.insertPage(-1, doc.addPage([0, 0, 595, 842], 0, doc.addObject({}), c));
+    const buf = doc.saveToBuffer("compress").asUint8Array().slice();
+    const ocr: OcrEngine = {
+      async recognize() {
+        throw new OcrSetupError("no models");
+      },
+    };
+    const [page] = await toMarkdownPages(buf, { ocr });
+    expect(page!.tables.length).toBe(1);
+  });
+
+  test("a healthy table page is not rendered for OCR", async () => {
+    const render = spyOn(PageRaster, "render");
+    try {
+      await toMarkdown(fixture("merged-cells-grid.pdf"), { ocr: fakeEngine() });
+      expect(render).not.toHaveBeenCalled();
+    } finally {
+      render.mockRestore();
+    }
+  });
+
+  test('an explicit "auto" raises an OCR setup error', async () => {
+    const ocr: OcrEngine = {
+      async recognize() {
+        throw new OcrSetupError("no models");
+      },
+    };
+    expect(
+      toMarkdown(fixture("broken-text-grid.pdf"), { textSource: "auto", ocr }),
+    ).rejects.toThrow("no models");
   });
 
   test('"ocr" keeps the vector grid and OCRs every cell', async () => {
@@ -298,6 +401,47 @@ describe("textSource on a vector grid with a broken text layer", () => {
     const md = await toMarkdown(buf, { tableStrategy: "lines", textSource: "auto", ocr });
     expect(ocr.calls.length).toBe(0);
     expect(md).toBe(await toMarkdown(buf, { tableStrategy: "lines" }));
+  });
+});
+
+test("OCR text of a cell gets its look-alike letters fixed", async () => {
+  const [page] = await toMarkdownPages(fixture("scanned-grid.pdf"), {
+    tableStrategy: "pixels",
+    ocr: fakeEngine(() => "Мосkвa"),
+  });
+  expect(page!.tables[0]!.cells[0]![0]!.text).toBe("Москва");
+});
+
+describe("auto with a font whose codes are broken", () => {
+  test("every cell set in that font is OCRed, even the ones that look printable", async () => {
+    const ocr = fakeEngine();
+    const [page] = await toMarkdownPages(fixture("type3-no-tounicode-grid.pdf"), {
+      textSource: "auto",
+      ocr,
+    });
+    const [broken, fine] = page!.tables;
+    expect(broken!.cells.flat().every((c) => c?.source === "ocr")).toBe(true);
+    expect(fine!.cells.flat().every((c) => c?.source === "pdf")).toBe(true);
+    expect(fine!.cells[1]!.map((c) => c!.text)).toEqual([
+      "1",
+      "Quartz Jumping Fox",
+      "Alpha",
+      "12,50",
+    ]);
+    expect(ocr.calls.length).toBe(20);
+  });
+
+  test("a few bad symbols in a healthy font OCR only their own cells", async () => {
+    const ocr = fakeEngine();
+    const [page] = await toMarkdownPages(fixture("footnote-marks-grid.pdf"), {
+      textSource: "auto",
+      ocr,
+    });
+    const cells = page!.tables[0]!.cells;
+    // "North*", "East*", "West*" hold the bad mark; the other 17 cells read fine.
+    expect(ocr.calls.length).toBe(3);
+    expect(cells[0]!.map((c) => c!.text)).toEqual(["No", "Region", "Count", "Share"]);
+    expect(cells[2]!.map((c) => c!.source)).toEqual(["pdf", "pdf", "pdf", "pdf"]);
   });
 });
 
@@ -363,6 +507,235 @@ async function scanShapes(name: string): Promise<number[][]> {
   });
   return pages.flatMap((p) => p.tables.map((t) => [t.rows, t.columns]));
 }
+
+describe("pixels: a label row across all columns", () => {
+  const label = "Section B: placeholder heading across columns";
+  const labelRow = (tables: { cells: ({ text: string } | null)[][] }[]) =>
+    tables[0]!.cells.find((r) => r.some((c) => c?.text.includes("Section")))!;
+
+  test("on a vector page it is one merged cell", async () => {
+    const [page] = await toMarkdownPages(fixture("merged-row-grid.pdf"), {
+      tableStrategy: "pixels",
+      textSource: "pdf",
+    });
+    const row = labelRow(page!.tables);
+    expect(row[0]!.text).toBe(label);
+    expect(row.slice(1).every((c) => c === null)).toBe(true);
+    expect(page!.text).toContain(`|${label}|`);
+  });
+
+  test("body rows without rules of their own stay split on a real scan", async () => {
+    // Column rules are faint in places; no data row may merge across them.
+    const [page] = await toMarkdownPages(fixture("scan-gb-abstract-1908-table.pdf"), {
+      tableStrategy: "pixels",
+      ocr: fakeEngine(),
+    });
+    const t = page!.tables[0]!;
+    // Only the label of the second part of the table (row 26) spans columns.
+    const merged = t.cells
+      .map((r, i) => (i > 2 && r.filter((c) => c === null).length > 1 ? i : -1))
+      .filter((i) => i >= 0);
+    expect(merged).toEqual([26]);
+  }, 60_000);
+
+  test("on a scan it is one merged cell", async () => {
+    const [page] = await toMarkdownPages(degrade(fixture("merged-row-grid.pdf"), {}), {
+      tableStrategy: "pixels",
+      ocr: fakeEngine(),
+    });
+    // Header, four rows, then the label.
+    const row = page!.tables[0]!.cells[5]!;
+    expect(row[0]).not.toBeNull();
+    expect(page!.tables[0]!.columns).toBe(5);
+    expect(row.slice(1).every((c) => c === null)).toBe(true);
+  }, 60_000);
+});
+
+describe("scans turned a quarter without /Rotate", () => {
+  const shapes = async (buf: Uint8Array, opts: MarkdownOptions = {}) => {
+    const pages = await toMarkdownPages(buf, {
+      tableStrategy: "pixels",
+      textSource: "pdf",
+      ...opts,
+    });
+    return pages.flatMap((p) => p.tables.map((t) => [t.rows, t.columns]));
+  };
+  const raster = (buf: Uint8Array) =>
+    PageRaster.render(mupdf.Document.openDocument(buf, "application/pdf").loadPage(0), 100);
+
+  test("inkAxis tells upright pages from pages turned sideways", () => {
+    for (const name of [
+      "scan-ru-census-1918.pdf",
+      "scan-ru-prose-1918.pdf",
+      "scan-us-census-1900.pdf",
+    ]) {
+      expect(inkAxis(raster(degrade(fixture(name), {})))).toBe("upright");
+      expect(inkAxis(raster(degrade(fixture(name), { quarter: 90 })))).toBe("sideways");
+      expect(inkAxis(raster(degrade(fixture(name), { quarter: 270 })))).toBe("sideways");
+    }
+  }, 60_000);
+
+  test("inkAxis is never wrong on scans fed askew, at worst unsure", () => {
+    const axes = (name: string) =>
+      [0, 1.5, 3, -3].map((deg) => inkAxis(raster(degrade(fixture(name), { deg }))));
+    for (const name of [
+      "scan-ru-prose-1918.pdf",
+      "scan-ru-census-1918.pdf",
+      "scan-us-census-1900.pdf",
+    ])
+      expect(axes(name)).toEqual(["upright", "upright", "upright", "upright"]);
+    // A dense table of figures: its rows are nearly as close as its columns.
+    expect(axes("scan-in-abstract-1901-table.pdf")).not.toContain("sideways");
+    const across = axes("scan-us-abstract-1909-sideways.pdf");
+    expect(across).not.toContain("upright");
+    expect(across.filter((a) => a === "sideways").length).toBeGreaterThanOrEqual(3);
+  }, 60_000);
+
+  test("an upright table page is not turned", async () => {
+    const buf = fixture("scan-in-abstract-1901-table.pdf");
+    const on = await toMarkdown(buf, { tableStrategy: "pixels", ocr: fakeEngine() });
+    const off = await toMarkdown(buf, {
+      tableStrategy: "pixels",
+      ocr: fakeEngine(),
+      detectOrientation: false,
+    });
+    expect(on).toBe(off);
+  }, 60_000);
+
+  for (const quarter of [90, 270] as const) {
+    test(`census 1918 turned ${quarter}° keeps its 6 columns`, async () => {
+      const [t] = await shapes(degrade(fixture("scan-ru-census-1918.pdf"), { quarter }));
+      expect(t![1]).toBe(6);
+      expect(t![0]).toBeGreaterThanOrEqual(20);
+      expect(t![0]).toBeLessThanOrEqual(21);
+    }, 60_000);
+  }
+
+  test("US census 1900 turned 90° keeps its columns", async () => {
+    const found = await shapes(degrade(fixture("scan-us-census-1900.pdf"), { quarter: 90 }));
+    expect(found.map((t) => t[1])).toEqual([10, 7]);
+  }, 60_000);
+
+  test("textPlausibility prefers words to scattered marks", () => {
+    for (const good of ["Total population 1900", "Всего по губернии", "12,50"])
+      for (const bad of ["006I uoᴉʇɐlndod", "' .: ,l ı", ""])
+        expect(textPlausibility(good)).toBeGreaterThan(textPlausibility(bad));
+  });
+
+  // Lines of "glyphs" heavy at the top, like capitals and ascenders; the
+  // fake engine reads a crop only when its heavy side is up.
+  const glyphPage = (flip: boolean) => {
+    const w = 800;
+    const h = 500;
+    const data = new Uint8Array(w * h).fill(255);
+    for (let line = 0; line < 6; line++) {
+      for (let g = 0; g < 40; g++) {
+        const x0 = 40 + g * 18;
+        const y0 = 40 + line * 70;
+        for (let y = 0; y < 16; y++)
+          for (let x = 0; x < 10; x++) if (y < 5 || x < 3) data[(y0 + y) * w + x0 + x] = 0;
+      }
+    }
+    if (flip) data.reverse();
+    return new PageRaster(data, w, h, 1);
+  };
+  const heavyTopReader = (): OcrEngine => ({
+    async recognize(img) {
+      let top = 0;
+      let bottom = 0;
+      for (let y = 0; y < img.height; y++)
+        for (let x = 0; x < img.width; x++)
+          if (img.data[y * img.width + x]! < 128) y < img.height / 2 ? top++ : bottom++;
+      return top > bottom ? "word word word" : "' , . ı";
+    },
+  });
+
+  test("upsideDown follows the engine", async () => {
+    expect(await upsideDown(glyphPage(false), heavyTopReader())).toBe(false);
+    expect(await upsideDown(glyphPage(true), heavyTopReader())).toBe(true);
+  });
+
+  test("upsideDown keeps the page when the engine reads both ways alike", async () => {
+    expect(
+      await upsideDown(
+        glyphPage(true),
+        fakeEngine(() => "same text"),
+      ),
+    ).toBe(false);
+  });
+
+  test("with the PDF text layer as source no OCR runs to find the turn", async () => {
+    const ocr = fakeEngine();
+    await toMarkdown(degrade(fixture("scan-ru-census-1918.pdf"), { quarter: 90 }), {
+      tableStrategy: "pixels",
+      textSource: "pdf",
+      ocr,
+    });
+    expect(ocr.calls.length).toBe(0);
+  }, 60_000);
+
+  test("a scan shown sideways by its /Rotate is turned upright without removeRotation", async () => {
+    const doc = mupdf.PDFDocument.openDocument(
+      fixture("scan-ru-census-1918.pdf"),
+      "application/pdf",
+    ) as mupdf.PDFDocument;
+    (doc.loadPage(0) as mupdf.PDFPage).getObject().put("Rotate", 90);
+    const buf = doc.saveToBuffer("compress").asUint8Array().slice();
+    for (const removeRotation of [true, false]) {
+      const [t] = await shapes(buf, { removeRotation });
+      expect(t![1]).toBe(6);
+    }
+  }, 60_000);
+
+  test("upright scans are not turned", async () => {
+    for (const name of [
+      "scan-ru-census-1918.pdf",
+      "scan-ru-prose-1918.pdf",
+      "scan-us-census-1900.pdf",
+    ]) {
+      const on = await toMarkdown(fixture(name), { tableStrategy: "pixels", ocr: fakeEngine() });
+      const off = await toMarkdown(fixture(name), {
+        tableStrategy: "pixels",
+        ocr: fakeEngine(),
+        detectOrientation: false,
+      });
+      expect(on).toBe(off);
+    }
+  }, 120_000);
+
+  test("pages with a text layer are never turned", async () => {
+    for (const name of ["rotated-cropbox-table.pdf", "multicolumn.pdf"]) {
+      const on = await toMarkdown(fixture(name), { tableStrategy: "pixels", ocr: fakeEngine() });
+      const off = await toMarkdown(fixture(name), {
+        tableStrategy: "pixels",
+        ocr: fakeEngine(),
+        detectOrientation: false,
+      });
+      expect(on).toBe(off);
+    }
+  }, 60_000);
+});
+
+testOcr(
+  "RapidOCR finds which way is up on a census page turned either way",
+  async () => {
+    const ocr = await createRapidOcr();
+    try {
+      const cells = async (buf: Uint8Array) =>
+        rows(await toMarkdown(buf, { tableStrategy: "pixels", ocr })).flat();
+      const upright = await cells(degrade(fixture("scan-ru-census-1918.pdf"), {}));
+      for (const quarter of [90, 270] as const) {
+        // Read upside down, hardly a cell would match.
+        const turned = await cells(degrade(fixture("scan-ru-census-1918.pdf"), { quarter }));
+        const same = turned.filter((v, i) => v.trim() && v === upright[i]).length;
+        expect(same).toBeGreaterThanOrEqual(0.6 * upright.filter((v) => v.trim()).length);
+      }
+    } finally {
+      await ocr.dispose?.();
+    }
+  },
+  600_000,
+);
 
 describe("pixels strategy on real scans", () => {
   test("US census 1900: two tables, a row per 1900/1890 line, group headers", async () => {

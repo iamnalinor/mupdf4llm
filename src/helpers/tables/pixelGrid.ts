@@ -164,13 +164,13 @@ export function findPixelGrids(raster: PageRaster): RuledGrid[] {
   const mx = page.width * EDGE_MARGIN;
   const my = page.height * EDGE_MARGIN;
   const edges = detectRulings(raster);
-  const vs = joinCollinear(
-    edges.flatMap((e) =>
-      e.kind === "v" && e.x > page.x0 + mx && e.x < page.x1 - mx
-        ? [{ pos: e.x, a: e.y0, b: e.y1 }]
-        : [],
-    ),
-  ).filter((v) => v.b - v.a >= MIN_RULE);
+  // The column rule pieces as found, before short gaps are bridged.
+  const pieces = edges.flatMap((e) =>
+    e.kind === "v" && e.x > page.x0 + mx && e.x < page.x1 - mx
+      ? [{ pos: e.x, a: e.y0, b: e.y1 }]
+      : [],
+  );
+  const vs = joinCollinear(pieces).filter((v) => v.b - v.a >= MIN_RULE);
   const hs = rowLines(
     joinCollinear(
       edges.flatMap((e) =>
@@ -183,7 +183,7 @@ export function findPixelGrids(raster: PageRaster): RuledGrid[] {
 
   const grids: RuledGrid[] = [];
   for (const group of groupColumns(vs)) {
-    const grid = gridFor(raster, group, hs);
+    const grid = gridFor(raster, group, hs, pieces);
     if (grid) grids.push(grid);
   }
   return grids;
@@ -284,7 +284,7 @@ function groupColumns(vs: Seg[]): Seg[][] {
   return [...groups.values()].filter((g) => positions(g, MIN_COL).length >= 2);
 }
 
-function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | null {
+function gridFor(raster: PageRaster, group: Seg[], hs: HLine[], pieces: Seg[]): RuledGrid | null {
   const cols = positions(group, MIN_COL);
   const cx0 = cols[0]!;
   const cx1 = cols[cols.length - 1]!;
@@ -395,6 +395,37 @@ function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | nul
     .filter((v) => v.b > y0 && v.a < y1)
     .map((v) => ({ x: snap(v.pos), y0: toRow(Math.max(v.a, y0)), y1: toRow(Math.min(v.b, y1)) }))
     .filter((v) => v.x !== x0 && v.x !== x1);
+  // Pieces of a column rule are joined across short gaps (a crossing rule, a
+  // dropout), and so across a row barely taller than its text, where the
+  // rules stop for a label spanning the columns. Undo that bridge: in a row
+  // ruled above and below, a column rule is taken out where the pieces
+  // actually found cover less than a third of the row. Rows without rules
+  // of their own are left alone, as are rules found in the row, however
+  // faint: the cells of a data row must not merge.
+  const ruledYs = [y0, y1, ...hard, ...positions(headerSegs)];
+  const ruledAt = (y: number) => ruledYs.some((r) => Math.abs(r - y) <= DOUBLE);
+  const found = (x: number, a: number, b: number) => {
+    let n = 0;
+    for (const p of pieces)
+      if (Math.abs(p.pos - x) <= ALIGN) n += Math.max(0, Math.min(p.b, b) - Math.max(p.a, a));
+    return n / Math.max(1e-6, b - a);
+  };
+  const kept: typeof inner = [];
+  for (const v of inner) {
+    let piece: (typeof inner)[number] | null = null;
+    for (let k = 0; k + 1 < rows.length; k++) {
+      const [ra, rb] = [rows[k]!, rows[k + 1]!];
+      if (rb <= v.y0 || ra >= v.y1) continue;
+      const a = Math.max(ra, v.y0);
+      const b = Math.min(rb, v.y1);
+      const gone = ruledAt(ra) && ruledAt(rb) && found(v.x, a, b) < 1 / 3;
+      if (!gone) {
+        if (piece && piece.y1 >= a) piece.y1 = b;
+        else kept.push((piece = { x: v.x, y0: a, y1: b }));
+      }
+    }
+  }
+  inner.splice(0, inner.length, ...kept);
   // In the header, a border with no rule at all in its row is inside a group
   // label ("MALES." over Total / Cities / Rural), even when the label is too
   // short to reach across it: mark it crossed so the cells merge.

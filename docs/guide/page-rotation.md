@@ -29,6 +29,31 @@ rotation worsens extraction):
 await toMarkdown(buf, { removeRotation: false });
 ```
 
+## Scans turned without `/Rotate`
+
+A sheet fed into the scanner sideways often comes out as a page with no
+`/Rotate` at all: the image itself lies on its side, and a table read off
+its pixels would have its rows and columns swapped. With
+`tableStrategy: "pixels"`, a page without a text layer is checked first:
+letters stand closer to their neighbours in a word, and words to theirs
+in a line, than to the lines above and below, so each letter- or
+word-sized piece of ink votes for the direction of its nearest neighbour.
+Rules, borders and the dark surround of a photographed page are too
+large to vote, and skew does not matter. A page whose lines clearly run
+vertically is turned a quarter before its tables are read, the same way
+`removeRotation` bakes a `/Rotate`; when the votes are close, the page is
+left as it is. Like `removeRotation`, the turn is made in the loaded
+document, also when `removeRotation` is off.
+Which quarter — clockwise or back — the ink cannot tell; when the cells
+are going to be OCR'd anyway (`textSource` other than `"pdf"`), a few of
+the longest lines are recognised both ways up and the page is turned so
+that they read as words. Pages with a text layer are never turned.
+
+```ts
+await toMarkdown(buf, { tableStrategy: "pixels" }); // detectOrientation: true by default
+await toMarkdown(buf, { tableStrategy: "pixels", detectOrientation: false });
+```
+
 ## Manual control
 
 Three helpers are exported for advanced use:
