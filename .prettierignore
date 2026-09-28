@@ -7,3 +7,5 @@ bun.lock
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 docs/reference/api/
+.corpus/
+.superpowers/

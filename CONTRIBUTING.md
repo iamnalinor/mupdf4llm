@@ -123,6 +123,28 @@ when in doubt, add a fixture to `tests/fixtures.test.ts` — the
 5. Run `bun run lint` to format, `bun test` to verify, `bun run docs:build`
    to confirm the docs site still builds.
 
+## Checking a change on real documents
+
+A fixture proves that a change fixes the case it was made for; it does not
+show what the change does to other documents. Changes to table detection,
+page orientation or OCR are checked on an evaluation corpus as well:
+`scripts/corpus.json` lists public pages with tables (scans of statistical
+yearbooks from the Internet Archive, US federal reports), and every PDF in
+`tests/fixtures` is included too. Only links and checksums are kept in the
+repository; the files are downloaded to `.corpus/`.
+
+```sh
+git worktree add .corpus/base main       # the version to compare against
+bun scripts/corpus.ts run .corpus/before --src .corpus/base/src/index.ts
+bun scripts/corpus.ts run .corpus/after
+bun scripts/corpus.ts compare .corpus/before .corpus/after
+```
+
+`compare` lists every page whose tables changed shape or text. Look at
+those pages: keep a heuristic only if what changes is better, and if it
+changes nothing else. Add `--ocr` to `run` to use the real OCR engine
+(much slower).
+
 ## Documentation
 
 Documentation is built with [VitePress](https://vitepress.dev/) +

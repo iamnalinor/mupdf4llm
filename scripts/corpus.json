@@ -1,0 +1,597 @@
+{
+  "about": "Evaluation corpus for table extraction, used by scripts/corpus.ts. Only links and checksums are kept here; files are downloaded to .corpus/. Scans: page images of statistical yearbooks (1893-1925) from the Internet Archive. Text PDFs: US federal publications. The PDFs in tests/fixtures are included as well.",
+  "sources": {
+    "ezhegodnikproizvodstvennojkooperatsii1923": "Ежегодник производственной кооперации, М.–Л., 1925",
+    "ezhegodnikglavnogoupravlenijazemleustroj34": "Ежегодник Главного управления землеустройства и земледелия, 1915",
+    "ezhegodnikgbakuna1893gbaku189329": "Ежегодник г. Баку на 1893 г.",
+    "ezhegodnikvologodskojguberniipogodam12": "Ежегодник Вологодской губернии на 1914 г.",
+    "annual-abstract-of-statistics-gb_1893-1907_55": "Statistical Abstract for the United Kingdom 1893-1907",
+    "india.history.resource.108757": "Statistical Abstract relating to British India, HMSO, 1901",
+    "hist-stat-abstract-hk-1922": "Historical and Statistical Abstract of the Colony of Hong Kong, 1922",
+    "cu31924030388791": "Statistical abstract of foreign countries, GPO, Washington, 1909"
+  },
+  "entries": [
+    {
+      "name": "ia/annual-abstract-of-statistics-gb_1893-1907_55/n112",
+      "url": "https://archive.org/download/annual-abstract-of-statistics-gb_1893-1907_55/page/n112.jpg",
+      "kind": "image",
+      "sha256": "8001f5e3266b8375acff2e4bce302ab52436d8886280d3705e3617801370b2ca",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/annual-abstract-of-statistics-gb_1893-1907_55/n150",
+      "url": "https://archive.org/download/annual-abstract-of-statistics-gb_1893-1907_55/page/n150.jpg",
+      "kind": "image",
+      "sha256": "05f777d28d48df12d390670966b300a86e00d6e9b97c16c764d86d5b17fca389",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/annual-abstract-of-statistics-gb_1893-1907_55/n188",
+      "url": "https://archive.org/download/annual-abstract-of-statistics-gb_1893-1907_55/page/n188.jpg",
+      "kind": "image",
+      "sha256": "b994c80d6fcefe393dde1aadb6503e2bb7baf1edf5c70872577b03c636469196",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/annual-abstract-of-statistics-gb_1893-1907_55/n225",
+      "url": "https://archive.org/download/annual-abstract-of-statistics-gb_1893-1907_55/page/n225.jpg",
+      "kind": "image",
+      "sha256": "4941a2e4bc097eb8dbe43ba6d173db6a9e78a4b17df8e824ab16f802c06a9537",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/annual-abstract-of-statistics-gb_1893-1907_55/n263",
+      "url": "https://archive.org/download/annual-abstract-of-statistics-gb_1893-1907_55/page/n263.jpg",
+      "kind": "image",
+      "sha256": "fcbfd92d6903425dfb2c67bd89d5deda72747e6dbeb3b4d7972c5dd37df28ae6",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/annual-abstract-of-statistics-gb_1893-1907_55/n301",
+      "url": "https://archive.org/download/annual-abstract-of-statistics-gb_1893-1907_55/page/n301.jpg",
+      "kind": "image",
+      "sha256": "94abdf4c96b29df23e875e021717b4ab6d7f0d791e8dd1c92bdbf5b71475e8c8",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/annual-abstract-of-statistics-gb_1893-1907_55/n338",
+      "url": "https://archive.org/download/annual-abstract-of-statistics-gb_1893-1907_55/page/n338.jpg",
+      "kind": "image",
+      "sha256": "b4e2d3f7e87d2e3478cded0218a9de96b922962deddcd4adf8497809343d6877",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/annual-abstract-of-statistics-gb_1893-1907_55/n37",
+      "url": "https://archive.org/download/annual-abstract-of-statistics-gb_1893-1907_55/page/n37.jpg",
+      "kind": "image",
+      "sha256": "9c626574e47802c1859c4fdcbea395a77cc5f49fb8183c7307d001b228629c8c",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/annual-abstract-of-statistics-gb_1893-1907_55/n376",
+      "url": "https://archive.org/download/annual-abstract-of-statistics-gb_1893-1907_55/page/n376.jpg",
+      "kind": "image",
+      "sha256": "47c0e9f834c8aa6f4302c271cf9cd69f2ecd638c418fdfb68c656844bf787cf3",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/annual-abstract-of-statistics-gb_1893-1907_55/n60",
+      "url": "https://archive.org/download/annual-abstract-of-statistics-gb_1893-1907_55/page/n60.jpg",
+      "kind": "image",
+      "sha256": "ee1466ae51c11e8edfe29b3c91b54d00f56f7e742c7a4e4668afe84353dff1f3",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/annual-abstract-of-statistics-gb_1893-1907_55/n75",
+      "url": "https://archive.org/download/annual-abstract-of-statistics-gb_1893-1907_55/page/n75.jpg",
+      "kind": "image",
+      "sha256": "e7d9ead32c621f1cbd603e28d388140b5d73e9f05e0e732f2ee2be78d7318bca",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/cu31924030388791/n124",
+      "url": "https://archive.org/download/cu31924030388791/page/n124.jpg",
+      "kind": "image",
+      "sha256": "cdebdaec63692ce6fa13df3c87a4e84ee73fe92ce1eb6dacc6265ef7bafd6698",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/cu31924030388791/n166",
+      "url": "https://archive.org/download/cu31924030388791/page/n166.jpg",
+      "kind": "image",
+      "sha256": "2d77b947f5b7486e5dcb5518b3be23f7be81c642d4972a06b5ff762b1295e93f",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/cu31924030388791/n208",
+      "url": "https://archive.org/download/cu31924030388791/page/n208.jpg",
+      "kind": "image",
+      "sha256": "388f3ef406e826b47e1bbac3a73266f51f98791bf65e39ca780dd12ad5ae472d",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/cu31924030388791/n249",
+      "url": "https://archive.org/download/cu31924030388791/page/n249.jpg",
+      "kind": "image",
+      "sha256": "0e615f245838e492e16bc4ce0e91f6c797450d5cc990eef4c901054bffb6e5c4",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/cu31924030388791/n291",
+      "url": "https://archive.org/download/cu31924030388791/page/n291.jpg",
+      "kind": "image",
+      "sha256": "42433610a21a5b4d44fdbda17d08e3856e658d1cbe4fd96121e2cb376935b0c4",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/cu31924030388791/n333",
+      "url": "https://archive.org/download/cu31924030388791/page/n333.jpg",
+      "kind": "image",
+      "sha256": "e03e820c6f4c03329167bd1b2f0601d4a5d5e5f8836a87fb0a80104745b1a7f9",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/cu31924030388791/n374",
+      "url": "https://archive.org/download/cu31924030388791/page/n374.jpg",
+      "kind": "image",
+      "sha256": "ea5dba8086d712c6e6e7c7adde32162bab2f9dc2a7665249b2ec029c273f9a36",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/cu31924030388791/n41",
+      "url": "https://archive.org/download/cu31924030388791/page/n41.jpg",
+      "kind": "image",
+      "sha256": "0df76d95294443d47726f9475434637d661740ec8fdbd033fdb48c598a50748a",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/cu31924030388791/n416",
+      "url": "https://archive.org/download/cu31924030388791/page/n416.jpg",
+      "kind": "image",
+      "sha256": "c12e7062990eba85fe3fff67fcb4052e993116336f81592b48a75d15edda72d0",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/cu31924030388791/n83",
+      "url": "https://archive.org/download/cu31924030388791/page/n83.jpg",
+      "kind": "image",
+      "sha256": "573b181e2d6fe2a425a001935a314052a1f1628bbf774bc3253ead68cb3819a1",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikgbakuna1893gbaku189329/n122",
+      "url": "https://archive.org/download/ezhegodnikgbakuna1893gbaku189329/page/n122.jpg",
+      "kind": "image",
+      "sha256": "d6f9dd3e6e5ace79ab6092462dd3a655ef38b7bc1c7b10e22f31f40058bc670a",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikgbakuna1893gbaku189329/n147",
+      "url": "https://archive.org/download/ezhegodnikgbakuna1893gbaku189329/page/n147.jpg",
+      "kind": "image",
+      "sha256": "6f05bfb852c80df00f26597b151c08089a77cdfe56b8e168eb56911a511fdca4",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikgbakuna1893gbaku189329/n171",
+      "url": "https://archive.org/download/ezhegodnikgbakuna1893gbaku189329/page/n171.jpg",
+      "kind": "image",
+      "sha256": "fb0dbcd844306eb63a152986c4b16bacd3997251b3ef3614ef5df5631ad945bc",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikgbakuna1893gbaku189329/n196",
+      "url": "https://archive.org/download/ezhegodnikgbakuna1893gbaku189329/page/n196.jpg",
+      "kind": "image",
+      "sha256": "c015fef508d08b1c90c07521229f3ff5301703b28cfa25e49a65a3dd1ce62ce2",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikgbakuna1893gbaku189329/n220",
+      "url": "https://archive.org/download/ezhegodnikgbakuna1893gbaku189329/page/n220.jpg",
+      "kind": "image",
+      "sha256": "8c22121bc03b8e1baa7a4b76d93f62a66d67158ad5515481b0f10719bf800a75",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikgbakuna1893gbaku189329/n24",
+      "url": "https://archive.org/download/ezhegodnikgbakuna1893gbaku189329/page/n24.jpg",
+      "kind": "image",
+      "sha256": "d94ecd671899efb4effdeb712cb5313a830308aa4c998771852f03f00445038f",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikgbakuna1893gbaku189329/n245",
+      "url": "https://archive.org/download/ezhegodnikgbakuna1893gbaku189329/page/n245.jpg",
+      "kind": "image",
+      "sha256": "d83c57e22e850486c3df4836744a635f3bc192e85e1a7e0d99c8901575908f11",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikgbakuna1893gbaku189329/n49",
+      "url": "https://archive.org/download/ezhegodnikgbakuna1893gbaku189329/page/n49.jpg",
+      "kind": "image",
+      "sha256": "07fe0d114b8c0d5964ac6bf92925d1efa3288f844e95288e37a861ae1e25e914",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikgbakuna1893gbaku189329/n73",
+      "url": "https://archive.org/download/ezhegodnikgbakuna1893gbaku189329/page/n73.jpg",
+      "kind": "image",
+      "sha256": "d0f5a85ae46de7df1a60dd33ec43b4a748cb42a412860dbe9b49114f9e4fe2ce",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikgbakuna1893gbaku189329/n98",
+      "url": "https://archive.org/download/ezhegodnikgbakuna1893gbaku189329/page/n98.jpg",
+      "kind": "image",
+      "sha256": "104e29ed43399b393eb890a3f04e8026a418389b8ba9806f6cdfebc38a32aed5",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikglavnogoupravlenijazemleustroj34/n193",
+      "url": "https://archive.org/download/ezhegodnikglavnogoupravlenijazemleustroj34/page/n193.jpg",
+      "kind": "image",
+      "sha256": "e783d6faa0edffddc13bc8cb01ae73b3e375dba670078e42f67525d500aefbc5",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikglavnogoupravlenijazemleustroj34/n290",
+      "url": "https://archive.org/download/ezhegodnikglavnogoupravlenijazemleustroj34/page/n290.jpg",
+      "kind": "image",
+      "sha256": "8aec4ea1410a9512d76d90cfdac82af23f8e1d542b0da90ab96d8a619620bfe7",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikglavnogoupravlenijazemleustroj34/n387",
+      "url": "https://archive.org/download/ezhegodnikglavnogoupravlenijazemleustroj34/page/n387.jpg",
+      "kind": "image",
+      "sha256": "971557d0c89d6b885a741856c95a99dc8c8b1213f61f5376777062976b5461b3",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikglavnogoupravlenijazemleustroj34/n484",
+      "url": "https://archive.org/download/ezhegodnikglavnogoupravlenijazemleustroj34/page/n484.jpg",
+      "kind": "image",
+      "sha256": "344897a568ec477f314909fc642c08b2fbc57a3a07b1c826f093c8bdbb96acd8",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikglavnogoupravlenijazemleustroj34/n581",
+      "url": "https://archive.org/download/ezhegodnikglavnogoupravlenijazemleustroj34/page/n581.jpg",
+      "kind": "image",
+      "sha256": "b9bde0bb06510e58875150970e62eb1a81404af1fa04ddb0a5739197fd5e9895",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikglavnogoupravlenijazemleustroj34/n678",
+      "url": "https://archive.org/download/ezhegodnikglavnogoupravlenijazemleustroj34/page/n678.jpg",
+      "kind": "image",
+      "sha256": "f35540e0502b4d00fe8fd9d0f59df32782b057226f5d59610530fcf86714511e",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikglavnogoupravlenijazemleustroj34/n775",
+      "url": "https://archive.org/download/ezhegodnikglavnogoupravlenijazemleustroj34/page/n775.jpg",
+      "kind": "image",
+      "sha256": "d4d814133b6b80d6ab2c6c1bfe622ba744defe59e6e02219dcf2d092ba174c5d",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikglavnogoupravlenijazemleustroj34/n872",
+      "url": "https://archive.org/download/ezhegodnikglavnogoupravlenijazemleustroj34/page/n872.jpg",
+      "kind": "image",
+      "sha256": "a898e88f48dbb5dd9c99676a84f6e0e104eeb501bbf3fb38405a0e6292d98a6d",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikglavnogoupravlenijazemleustroj34/n96",
+      "url": "https://archive.org/download/ezhegodnikglavnogoupravlenijazemleustroj34/page/n96.jpg",
+      "kind": "image",
+      "sha256": "79159b10b3fec8e753c3b2649904ae8574a388d15ca37f5695fd8f785562459d",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikglavnogoupravlenijazemleustroj34/n969",
+      "url": "https://archive.org/download/ezhegodnikglavnogoupravlenijazemleustroj34/page/n969.jpg",
+      "kind": "image",
+      "sha256": "172c2ad27ecda533abed9d038d5c5f64458677da6aa3a9954ad0c3537c987621",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikproizvodstvennojkooperatsii1923/n100",
+      "url": "https://archive.org/download/ezhegodnikproizvodstvennojkooperatsii1923/page/n100.jpg",
+      "kind": "image",
+      "sha256": "53b9cfd7fc1b593921354f60013f0f9d0fef30d74fc76c504dd8f4264e3eac74",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikproizvodstvennojkooperatsii1923/n134",
+      "url": "https://archive.org/download/ezhegodnikproizvodstvennojkooperatsii1923/page/n134.jpg",
+      "kind": "image",
+      "sha256": "8d8d810d30b6af3604c7f7320f55ad4162a1956097ac012f18308af64eaee851",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikproizvodstvennojkooperatsii1923/n167",
+      "url": "https://archive.org/download/ezhegodnikproizvodstvennojkooperatsii1923/page/n167.jpg",
+      "kind": "image",
+      "sha256": "7fab753bd08b45c266b39240e45d5bf1f06d4e65e2fae19d3f2ba0ce06da0c80",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikproizvodstvennojkooperatsii1923/n201",
+      "url": "https://archive.org/download/ezhegodnikproizvodstvennojkooperatsii1923/page/n201.jpg",
+      "kind": "image",
+      "sha256": "663c3d5117f23af9c4c59f9eb6e0bd406844e259770d29fe6d88d3b50945deb7",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikproizvodstvennojkooperatsii1923/n234",
+      "url": "https://archive.org/download/ezhegodnikproizvodstvennojkooperatsii1923/page/n234.jpg",
+      "kind": "image",
+      "sha256": "4bfd039d268031c04b785fb6fca193f206f67edd2d341358b11175f11e4591e4",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikproizvodstvennojkooperatsii1923/n268",
+      "url": "https://archive.org/download/ezhegodnikproizvodstvennojkooperatsii1923/page/n268.jpg",
+      "kind": "image",
+      "sha256": "1330f2d5330a0685d0960a5d6d921c0fe8511ed75fa52c4b20ba42c68cc4e048",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikproizvodstvennojkooperatsii1923/n301",
+      "url": "https://archive.org/download/ezhegodnikproizvodstvennojkooperatsii1923/page/n301.jpg",
+      "kind": "image",
+      "sha256": "131218ff55e37881c3adc10ff0d1bfaad84df8fb4fa581ddc2e20766c6f242f4",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikproizvodstvennojkooperatsii1923/n33",
+      "url": "https://archive.org/download/ezhegodnikproizvodstvennojkooperatsii1923/page/n33.jpg",
+      "kind": "image",
+      "sha256": "df447b346027285a40a4c01b3614d787d024ee6ddb862a1d9265eaff2fcaf0bc",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikproizvodstvennojkooperatsii1923/n335",
+      "url": "https://archive.org/download/ezhegodnikproizvodstvennojkooperatsii1923/page/n335.jpg",
+      "kind": "image",
+      "sha256": "f1f2b0fa56cdb6cc12383e8bbea3a57c704142a01f48f344298b28efc9e0489a",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikproizvodstvennojkooperatsii1923/n60",
+      "url": "https://archive.org/download/ezhegodnikproizvodstvennojkooperatsii1923/page/n60.jpg",
+      "kind": "image",
+      "sha256": "2ea067f6af00b51a3fc4a641e0ccc0e69ffd89e2a025331f0ab50702fc462359",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikproizvodstvennojkooperatsii1923/n67",
+      "url": "https://archive.org/download/ezhegodnikproizvodstvennojkooperatsii1923/page/n67.jpg",
+      "kind": "image",
+      "sha256": "ad3aa0686a34b1654d617bc27d21461a49d29034ee2e4ed81e15906227639cd8",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikvologodskojguberniipogodam12/n132",
+      "url": "https://archive.org/download/ezhegodnikvologodskojguberniipogodam12/page/n132.jpg",
+      "kind": "image",
+      "sha256": "5a5572f5a976b267991040fc854268e420eae245bb3eeb1c6ca426be0c19b94f",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikvologodskojguberniipogodam12/n165",
+      "url": "https://archive.org/download/ezhegodnikvologodskojguberniipogodam12/page/n165.jpg",
+      "kind": "image",
+      "sha256": "305d80b1e63eb4c4845ce7c4710b43e33bfa7e00801a0b90f79b37cfa33d04d3",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikvologodskojguberniipogodam12/n198",
+      "url": "https://archive.org/download/ezhegodnikvologodskojguberniipogodam12/page/n198.jpg",
+      "kind": "image",
+      "sha256": "3d1d483b9d76320a7cb38e995f2998d886e3c4554371204af60094626e67b531",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikvologodskojguberniipogodam12/n231",
+      "url": "https://archive.org/download/ezhegodnikvologodskojguberniipogodam12/page/n231.jpg",
+      "kind": "image",
+      "sha256": "c0e83a4d3e1be22a8a3348af0574f31a2783d7c630d8eaa3bc7aeb8d28bf16d8",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikvologodskojguberniipogodam12/n264",
+      "url": "https://archive.org/download/ezhegodnikvologodskojguberniipogodam12/page/n264.jpg",
+      "kind": "image",
+      "sha256": "0b9cc18357c592d18a3f64218d7540651aa0cfddf89621a07f34d301dcdfd13a",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikvologodskojguberniipogodam12/n297",
+      "url": "https://archive.org/download/ezhegodnikvologodskojguberniipogodam12/page/n297.jpg",
+      "kind": "image",
+      "sha256": "b0a30e79e03685c9f6b3d22a159b0d4580f5a3ccafa0ae7547fad0f9265ff73a",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikvologodskojguberniipogodam12/n33",
+      "url": "https://archive.org/download/ezhegodnikvologodskojguberniipogodam12/page/n33.jpg",
+      "kind": "image",
+      "sha256": "0916fc1a7271548af35879e2f22951bb0b1196d90d36328cc30cfe84388956dc",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikvologodskojguberniipogodam12/n330",
+      "url": "https://archive.org/download/ezhegodnikvologodskojguberniipogodam12/page/n330.jpg",
+      "kind": "image",
+      "sha256": "7112ce45ffdb3780b62d89e48714113667de2b80102045029906511d34b0ff31",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikvologodskojguberniipogodam12/n66",
+      "url": "https://archive.org/download/ezhegodnikvologodskojguberniipogodam12/page/n66.jpg",
+      "kind": "image",
+      "sha256": "631480dd6df0f6bb2c9adcd8e0ccb21428fbe5ebe21227ff53eae6949bc5abf0",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/ezhegodnikvologodskojguberniipogodam12/n99",
+      "url": "https://archive.org/download/ezhegodnikvologodskojguberniipogodam12/page/n99.jpg",
+      "kind": "image",
+      "sha256": "9b390a5eb6d74d68de6e79df1572d5ff59f792b2630ffa536f05ceb61bc3835d",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/hist-stat-abstract-hk-1922/n109",
+      "url": "https://archive.org/download/hist-stat-abstract-hk-1922/page/n109.jpg",
+      "kind": "image",
+      "sha256": "2584716ef64be3bd7d91812a72324551dc419b19d53efc5b283bf682df8d9c65",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/hist-stat-abstract-hk-1922/n127",
+      "url": "https://archive.org/download/hist-stat-abstract-hk-1922/page/n127.jpg",
+      "kind": "image",
+      "sha256": "2584716ef64be3bd7d91812a72324551dc419b19d53efc5b283bf682df8d9c65",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/hist-stat-abstract-hk-1922/n145",
+      "url": "https://archive.org/download/hist-stat-abstract-hk-1922/page/n145.jpg",
+      "kind": "image",
+      "sha256": "2584716ef64be3bd7d91812a72324551dc419b19d53efc5b283bf682df8d9c65",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/hist-stat-abstract-hk-1922/n163",
+      "url": "https://archive.org/download/hist-stat-abstract-hk-1922/page/n163.jpg",
+      "kind": "image",
+      "sha256": "2584716ef64be3bd7d91812a72324551dc419b19d53efc5b283bf682df8d9c65",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/hist-stat-abstract-hk-1922/n18",
+      "url": "https://archive.org/download/hist-stat-abstract-hk-1922/page/n18.jpg",
+      "kind": "image",
+      "sha256": "d429ed122744bc1abb061105279b20cc37fe467268b910066fa5403d0c730860",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/hist-stat-abstract-hk-1922/n181",
+      "url": "https://archive.org/download/hist-stat-abstract-hk-1922/page/n181.jpg",
+      "kind": "image",
+      "sha256": "2584716ef64be3bd7d91812a72324551dc419b19d53efc5b283bf682df8d9c65",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/hist-stat-abstract-hk-1922/n36",
+      "url": "https://archive.org/download/hist-stat-abstract-hk-1922/page/n36.jpg",
+      "kind": "image",
+      "sha256": "f48aff40afcbcfbda2350c55885f39e993d3f4327ffdf356f029bfaf49f11201",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/hist-stat-abstract-hk-1922/n54",
+      "url": "https://archive.org/download/hist-stat-abstract-hk-1922/page/n54.jpg",
+      "kind": "image",
+      "sha256": "c6b53d0556741fb094d5179405d51319b78ce3f8fefffd1686da5a19cbf54a20",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/hist-stat-abstract-hk-1922/n72",
+      "url": "https://archive.org/download/hist-stat-abstract-hk-1922/page/n72.jpg",
+      "kind": "image",
+      "sha256": "4c51d2b5616a8f7a80c73b04228dcc911a0b8332845391c31df058551926aae8",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/hist-stat-abstract-hk-1922/n90",
+      "url": "https://archive.org/download/hist-stat-abstract-hk-1922/page/n90.jpg",
+      "kind": "image",
+      "sha256": "c968462d5247e46b361c77d142874917394cb78f5ee479be485d74829e226cf7",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/india.history.resource.108757/n109",
+      "url": "https://archive.org/download/india.history.resource.108757/page/n109.jpg",
+      "kind": "image",
+      "sha256": "3b42a315a55a1ee3ab09f7034e7f972753b604aa46a223fe8f5b491c5fbb95d1",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/india.history.resource.108757/n127",
+      "url": "https://archive.org/download/india.history.resource.108757/page/n127.jpg",
+      "kind": "image",
+      "sha256": "8bcb4b47a58ea27cc415d8059bbe326f542d01f3f2372f118ade01ed3b04d34b",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/india.history.resource.108757/n145",
+      "url": "https://archive.org/download/india.history.resource.108757/page/n145.jpg",
+      "kind": "image",
+      "sha256": "9c111b43124a497ec847fefeea3f9775ec6d14db575e5180ad7309cd74696a97",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/india.history.resource.108757/n163",
+      "url": "https://archive.org/download/india.history.resource.108757/page/n163.jpg",
+      "kind": "image",
+      "sha256": "f712e019968e0d01df935896f15fdcf9898b9ba22580d8e055ea432ebebfb596",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/india.history.resource.108757/n18",
+      "url": "https://archive.org/download/india.history.resource.108757/page/n18.jpg",
+      "kind": "image",
+      "sha256": "13b91b673b793dc7bc50ac4f598e002ff174b2eb1399dad1f0f6bd06b84329ac",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/india.history.resource.108757/n181",
+      "url": "https://archive.org/download/india.history.resource.108757/page/n181.jpg",
+      "kind": "image",
+      "sha256": "37b540469677f324f6825a024520896f47cb20ee31a80cf739100bbfa0e8fcab",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/india.history.resource.108757/n36",
+      "url": "https://archive.org/download/india.history.resource.108757/page/n36.jpg",
+      "kind": "image",
+      "sha256": "c34cc187e71180bd5837e837ccd8468de6fbf45cc00297fb96ea3165f91c15b2",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/india.history.resource.108757/n54",
+      "url": "https://archive.org/download/india.history.resource.108757/page/n54.jpg",
+      "kind": "image",
+      "sha256": "1967d89fd948c421e8ce241b806facac28a356f3009426eb6a1709b87390a0f8",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/india.history.resource.108757/n72",
+      "url": "https://archive.org/download/india.history.resource.108757/page/n72.jpg",
+      "kind": "image",
+      "sha256": "670ac3e9f963590234246bdfc2fe760dde42ac2f53ff6e9781a87c44c54c8f98",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "ia/india.history.resource.108757/n90",
+      "url": "https://archive.org/download/india.history.resource.108757/page/n90.jpg",
+      "kind": "image",
+      "sha256": "c5df1d9c40b5c87b7b566c5f03c053e7d1af7b314717d0eb60775eb4ffa8b5e4",
+      "configs": ["pixels"]
+    },
+    {
+      "name": "census/p60-282",
+      "url": "https://www2.census.gov/library/publications/2024/demo/p60-282.pdf",
+      "kind": "pdf",
+      "sha256": "e6cf145cb10b5d037f5e77fa199d2e558bfe24f76273f385e9767c2eabba1cbf",
+      "pages": [8, 11, 14, 15, 20, 21, 37, 39, 41, 46],
+      "configs": ["default", "pixels", "scan"]
+    }
+  ]
+}
