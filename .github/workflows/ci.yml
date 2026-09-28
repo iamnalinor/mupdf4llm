@@ -2,12 +2,11 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
-  pull_request:
     branches: [main]
+  pull_request:
 
 jobs:
-  parity:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -21,7 +20,7 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install pymupdf4llm (for parity tests)
+      - name: Install pymupdf4llm (reference for parity checks)
         run: pip install -r requirements.txt
 
       - name: Install dependencies
@@ -33,7 +32,7 @@ jobs:
       - name: Build docs (smoke)
         run: bun run docs:build
 
-      - name: Run parity tests
+      - name: Run tests
         run: bun test
 
       - name: Build

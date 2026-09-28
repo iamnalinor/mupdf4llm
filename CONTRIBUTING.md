@@ -161,7 +161,7 @@ Documentation is built with [VitePress](https://vitepress.dev/) +
 
 ## CI
 
-`.github/workflows/ci.yml` runs on every push and PR. Steps:
+`.github/workflows/ci.yml` runs on pushes to `main` and on every PR. Steps:
 
 1. `bun install --frozen-lockfile`
 2. `bun run lint:check` — Prettier + ESLint + tsc
@@ -169,6 +169,10 @@ Documentation is built with [VitePress](https://vitepress.dev/) +
 4. `bun test` — unit + parity suite
 5. `bun run build` — emit dist artifacts
 6. `npm pack --dry-run` — verify the published tarball
+
+`.github/workflows/release.yml` fires after CI succeeds on a push to
+`main`. If that commit bumped `version` in `package.json`, it builds,
+tags `v<version>` and runs `npm publish` — without re-running lint or tests.
 
 ## License
 
