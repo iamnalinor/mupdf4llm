@@ -416,6 +416,59 @@ function scannedGrid() {
 }
 
 /**
+ * A scan whose rows run level but whose columns lean 0.5°: the sheet was
+ * sheared, not turned, as a flatbed or a printer feeding it askew leaves
+ * it. A tall table of numbers set flush right against the column rules,
+ * so a crop that follows an upright rule takes a piece of the leaning one
+ * or cuts off a digit.
+ */
+function shearedScanGrid() {
+  const cols = [60, 110, 200, 260, 320];
+  const top = 790;
+  const ROW = 18;
+  const size = 10;
+  let c = "0 G 1 w\n";
+  const n = 40;
+  for (let r = 0; r <= n; r++)
+    c += `${cols[0]} ${top - r * ROW} m ${cols.at(-1)} ${top - r * ROW} l S\n`;
+  for (const x of cols) c += `${x} ${top} m ${x} ${top - n * ROW} l S\n`;
+  for (let r = 0; r < n; r++) {
+    const vals = [
+      String(r + 1),
+      String((r * 13) % 97),
+      String((r * 7) % 100),
+      String((r * 31) % 89),
+    ];
+    vals.forEach((v, k) => {
+      // Helvetica digits are 0.556 em wide; set flush right, 1.5 pt off the rule.
+      const x = cols[k + 1]! - 1.5 - v.length * 0.556 * size;
+      c += text(x, top - r * ROW - 13, v, size);
+    });
+  }
+  const src = new mupdf.PDFDocument();
+  const font = src.addSimpleFont(new mupdf.Font("Helvetica"));
+  const res = src.addObject({ Font: { F1: font } });
+  src.insertPage(-1, src.addPage([0, 0, W, H], 0, res, c));
+  const DPI = 200;
+  const pix = src
+    .loadPage(0)
+    .toPixmap(mupdf.Matrix.scale(DPI / 72, DPI / 72), mupdf.ColorSpace.DeviceGray, false);
+
+  const doc = new mupdf.PDFDocument();
+  const img = doc.addImage(new mupdf.Image(pix));
+  const resources = doc.addObject({ XObject: { Im0: img } });
+  // x grows with the image's v (up the page): columns lean, rows stay level.
+  const lean = (H * Math.tan((0.5 * Math.PI) / 180)).toFixed(3);
+  const shift = (-Number(lean) / 2).toFixed(3);
+  doc.insertPage(
+    -1,
+    doc.addPage([0, 0, W, H], 0, resources, `q ${W} 0 ${lean} ${H} ${shift} 0 cm /Im0 Do Q\n`),
+  );
+  writeFileSync(`${OUT}/sheared-scan-grid.pdf`, doc.saveToBuffer("compress").asUint8Array());
+  console.log(`wrote ${OUT}/sheared-scan-grid.pdf`);
+}
+
+/**
  * Correct vector grid, broken text layer: the body rows use a font whose
  * ToUnicode map sends every printable code to the Private Use Area, as in
  * PDFs with a mangled font encoding. The header row is intact.
@@ -457,8 +510,6 @@ function brokenTextGrid() {
  * ASCII gibberish. The second table is in Helvetica and reads fine.
  */
 function type3NoUnicodeGrid() {
-  const doc = new mupdf.PDFDocument();
-  const good = doc.addSimpleFont(new mupdf.Font("Helvetica"));
   const rows = [
     ["Code", "Placeholder name", "Group", "Points"],
     ["1", "Quartz Jumping Fox", "Alpha", "12,50"],
@@ -466,6 +517,49 @@ function type3NoUnicodeGrid() {
     ["3", "Hazy Mellow Kite", "Sigma", "40,75"],
     ["4", "Oblique Pixel Dune", "Omega", "63,00"],
   ];
+  type3Grid("type3-no-tounicode-grid.pdf", rows, rows, 24, 11, 560);
+}
+
+/**
+ * The same font on a long table: the glyphs that come out as control
+ * characters are under 5% of its text, the rest is printable gibberish.
+ * The last cell of row 3 is invisible text (render mode 3): the page shows
+ * it empty.
+ */
+function type3NoUnicodeLongGrid() {
+  const names = [
+    "Quartz Jumping Fox",
+    "Brisk Violet Wyvern",
+    "Hazy Mellow Kite",
+    "Oblique Pixel Dune",
+  ];
+  const groups = ["Alpha", "Delta", "Sigma", "Omega"];
+  const rows = [["Code", "Placeholder name", "Group", "Points"]];
+  for (let i = 1; i <= 36; i++)
+    rows.push([
+      String(i),
+      names[i % 4]!,
+      groups[(i >> 2) % 4]!,
+      `${(i * 37) % 100},${(i * 13) % 100}`,
+    ]);
+  type3Grid("type3-no-tounicode-long-grid.pdf", rows, rows.slice(0, 5), 14, 9, 200, [3, 3]);
+}
+
+/**
+ * Two tables on one page: `rows` in the Type3 font, `plain` in Helvetica
+ * at `second` (its top), and a heading in the Type3 font that uses up the first glyphs.
+ */
+function type3Grid(
+  file: string,
+  rows: string[][],
+  plain: string[][],
+  ROW: number,
+  size: number,
+  second: number,
+  hidden?: [number, number],
+) {
+  const doc = new mupdf.PDFDocument();
+  const good = doc.addSimpleFont(new mupdf.Font("Helvetica"));
   const heading = "#$%&*+-/:;<=>?@[]^_{|}~!EILNRTUXYZ";
   // Glyph numbers by first use; each glyph is drawn as a plain bar.
   const codes = new Map<string, number>();
@@ -499,26 +593,28 @@ function type3NoUnicodeGrid() {
   const hex = (s: string) =>
     [...s].map((ch) => codes.get(ch)!.toString(16).padStart(2, "0")).join("");
   const cols = [60, 110, 300, 400, 520];
-  const ROW = 24;
-  const table = (top: number, font: string) => {
+  const table = (top: number, font: string, body: string[][]) => {
     let c = "0 G 1 w\n";
-    for (let r = 0; r <= rows.length; r++)
+    for (let r = 0; r <= body.length; r++)
       c += `${cols[0]} ${top - r * ROW} m ${cols.at(-1)} ${top - r * ROW} l S\n`;
-    for (const x of cols) c += `${x} ${top} m ${x} ${top - rows.length * ROW} l S\n`;
-    rows.forEach((row, r) =>
+    for (const x of cols) c += `${x} ${top} m ${x} ${top - body.length * ROW} l S\n`;
+    body.forEach((row, r) =>
       row.forEach((v, k) => {
         const s = font === "F2" ? `<${hex(v)}>` : `(${v})`;
-        c += `BT /${font} 11 Tf ${cols[k]! + 6} ${top - r * ROW - 16} Td ${s} Tj ET\n`;
+        const mode = font === "F2" && hidden?.[0] === r && hidden[1] === k ? "3 Tr " : "";
+        c += `BT ${mode}/${font} ${size} Tf ${cols[k]! + 6} ${top - r * ROW - (ROW * 2) / 3} Td ${s} Tj ET\n`;
       }),
     );
     return c;
   };
   const resources = doc.addObject({ Font: { F1: good, F2: t3 } });
   const content =
-    `BT /F2 11 Tf 60 790 Td <${hex(heading)}> Tj ET\n` + table(760, "F2") + table(560, "F1");
+    `BT /F2 11 Tf 60 790 Td <${hex(heading)}> Tj ET\n` +
+    table(760, "F2", rows) +
+    table(second, "F1", plain);
   doc.insertPage(-1, doc.addPage([0, 0, W, H], 0, resources, content));
-  writeFileSync(`${OUT}/type3-no-tounicode-grid.pdf`, doc.saveToBuffer("compress").asUint8Array());
-  console.log(`wrote ${OUT}/type3-no-tounicode-grid.pdf`);
+  writeFileSync(`${OUT}/${file}`, doc.saveToBuffer("compress").asUint8Array());
+  console.log(`wrote ${OUT}/${file}`);
 }
 
 /**
@@ -603,8 +699,10 @@ const all: Record<string, () => void> = {
   ruleVariants,
   splitLineRows,
   scannedGrid,
+  shearedScanGrid,
   brokenTextGrid,
   type3NoUnicodeGrid,
+  type3NoUnicodeLongGrid,
   footnoteMarksGrid,
   mergedRowGrid,
 };

@@ -9,6 +9,9 @@ type Run = { a: number; b: number; n: number };
 /** A ruling line assembled from runs on adjacent pixel rows (or columns). */
 type Rule = { a: number; b: number; ink: number; weighted: number; last: number };
 
+/** A column rule this long (pt) is kept with text pressed against both sides. */
+const LONG_RULE = 72;
+
 /**
  * Ruling lines of a rendered page, for the `pixels` table strategy.
  *
@@ -28,21 +31,32 @@ export function detectRulings(raster: PageRaster): DrawingEdge[] {
 
   const inkH = (row: number, i: number) => row >= 0 && row < h && ink[row * w + i] === 1;
   const inkV = (col: number, i: number) => col >= 0 && col < w && ink[i * w + col] === 1;
-  // A rule has blank paper on at least one side. A run through a line of
-  // dense text (small caps, a low-resolution scan) has ink on both.
-  const clear =
-    (isInk: typeof inkH) => (r: { a: number; b: number; pos: number; thick: number }) => {
-      const off = Math.round(r.thick / 2 + scale * 1.5);
-      const side = (line: number) => {
-        let n = 0;
-        for (let i = r.a; i <= r.b; i++) if (isInk(line, i)) n++;
-        return n / (r.b - r.a + 1);
-      };
-      const p = Math.round(r.pos);
-      return side(p - off) < 0.4 || side(p + off) < 0.4;
+  // Shares of ink beside a run, a little off its middle on either side.
+  const sides = (isInk: typeof inkH, r: { a: number; b: number; pos: number; thick: number }) => {
+    const off = Math.round(r.thick / 2 + scale * 1.5);
+    const side = (line: number) => {
+      let n = 0;
+      for (let i = r.a; i <= r.b; i++) if (isInk(line, i)) n++;
+      return n / (r.b - r.a + 1);
     };
-  const horiz = scan(h, w, inkH, gap, minLen, maxThick).filter(clear(inkH));
-  const vert = scan(w, h, inkV, gap, minLen, maxThick).filter(clear(inkV));
+    const p = Math.round(r.pos);
+    return [side(p - off), side(p + off)];
+  };
+  // A rule has blank paper on at least one side. A run through a line of
+  // dense text (small caps, a low-resolution scan) has ink on both, and so
+  // has a short dark run by a column of figures (a torn edge, a blot). A
+  // long column rule may have text pressed against both sides (a small
+  // table with numbers set flush against it), but solid ink on neither:
+  // the gaps between text lines show. Solid ink on a side is the edge of a
+  // dark border.
+  const longRule = Math.round(scale * LONG_RULE);
+  const horiz = scan(h, w, inkH, gap, minLen, maxThick).filter(
+    (r) => Math.min(...sides(inkH, r)) < 0.4,
+  );
+  const vert = scan(w, h, inkV, gap, minLen, maxThick).filter((r) => {
+    const s = sides(inkV, r);
+    return Math.min(...s) < 0.4 || (r.b - r.a + 1 >= longRule && Math.max(...s) < 0.9);
+  });
 
   const edges: DrawingEdge[] = [];
   for (const r of horiz) {
@@ -64,6 +78,114 @@ export function detectRulings(raster: PageRaster): DrawingEdge[] {
     });
   }
   return edges;
+}
+
+/**
+ * Column rules found on the {@link PageRaster.faintInk} map: a rule faded
+ * or printed thin, which a scan renders in light grey and the ink map
+ * breaks into dots. Text in light grey and show-through from the back of
+ * the sheet show up here too, so these count only inside a table (see
+ * {@link findPixelGrids}).
+ */
+function fadedColumnRules(raster: PageRaster): Seg[] {
+  const { width: w, height: h, scale } = raster;
+  const faint = raster.faintInk;
+  const gap = Math.max(2, Math.round(scale));
+  const minLen = Math.max(12, Math.round(scale * 24));
+  const maxThick = Math.max(2, scale * 4);
+  const isInk = (col: number, i: number) => col >= 0 && col < w && faint[i * w + col] === 1;
+  return scan(w, h, isInk, gap, minLen, maxThick).map((r) => ({
+    pos: raster.pageX(r.pos),
+    a: raster.pageY(r.a),
+    b: raster.pageY(r.b),
+  }));
+}
+
+/** Column rules shorter than this (pt) are too short to measure a lean on. */
+const LEAN_RULE = 72;
+/** A lean past this (degrees) is no shear: a scan is askew by 3° at most. */
+const LEAN_MAX = 3;
+/** Column rules leaning further than this (degrees) from their median do not share one lean. */
+const LEAN_SPREAD = 0.15;
+
+/**
+ * How far the column rules lean from upright, in degrees (x growing with y
+ * is positive), when they all lean alike; else 0. A sheet sheared rather
+ * than turned (fed askew through a scanner or a printer) has level rows
+ * but leaning columns, and deskewing it by its rows leaves the columns
+ * leaning. Each rule's lean is fitted to the middle of its ink along its
+ * length, twice: the second time on a narrow window along the first line,
+ * so that text set flush against the rule does not pull the fit. Rules
+ * that lean differently (a curled page), or further than LEAN_MAX, give 0.
+ */
+export function columnLean(raster: PageRaster): number {
+  const { width: w, scale } = raster;
+  const ink = raster.ink;
+  const step = Math.max(1, Math.round(2 * scale));
+  const leans: number[] = [];
+  for (const e of detectRulings(raster)) {
+    if (e.kind !== "v" || e.y1 - e.y0 < LEAN_RULE) continue;
+    const y0 = raster.pixelY(e.y0);
+    const y1 = raster.pixelY(e.y1);
+    const stroke = Math.max(2, Math.ceil(e.width * scale) + 2);
+    // Least-squares fit of x against y over the middle of the rule within
+    // `half` pixels of `center(y)`.
+    const fit = (center: (y: number) => number, half: number) => {
+      let n = 0;
+      let sy = 0;
+      let sx = 0;
+      let syy = 0;
+      let sxy = 0;
+      for (let y = y0; y <= y1; y += step) {
+        const c = Math.round(center(y));
+        // The ink in the window must be one run no wider than the stroke,
+        // clear of the window's edges: a second run is a figure beside the
+        // rule, a wide one a crossing, and one cut by the edge may be the
+        // side of a figure while the rule has drifted out of the window.
+        const lo = Math.max(0, c - half);
+        const hi = Math.min(w - 1, c + half);
+        let runs = 0;
+        let a = -1;
+        let b = -1;
+        for (let x = lo; x <= hi; x++) {
+          if (!ink[y * w + x]) continue;
+          if (x !== b + 1) {
+            runs++;
+            a = x;
+          }
+          b = x;
+        }
+        if (runs !== 1 || b - a + 1 > stroke) continue;
+        if ((a === lo && lo > 0) || (b === hi && hi < w - 1)) continue;
+        const x = (a + b) / 2;
+        n++;
+        sy += y;
+        sx += x;
+        syy += y * y;
+        sxy += x * y;
+      }
+      const d = n * syy - sy * sy;
+      if (n < 10 || !d) return null;
+      const slope = (n * sxy - sx * sy) / d;
+      const base = (sx - slope * sy) / n;
+      return { slope, at: (y: number) => base + slope * y };
+    };
+    // A wide window finds the rule; figures set flush against it fall in
+    // that window too and flatten the fit. A second fit, on a window just
+    // wider than the stroke and following the first line, sees the rule
+    // alone.
+    const cx = raster.pixelX(e.x);
+    const first = fit(() => cx, Math.max(2, Math.round(3 * scale)));
+    if (!first) continue;
+    const narrow = Math.max(1, Math.round((e.width * scale) / 2) + 1);
+    const line = fit(first.at, narrow) ?? first;
+    leans.push((Math.atan(line.slope) * 180) / Math.PI);
+  }
+  if (leans.length < 2) return 0;
+  leans.sort((a, b) => a - b);
+  const median = leans[leans.length >> 1]!;
+  if (Math.abs(median) > LEAN_MAX) return 0;
+  return leans.every((l) => Math.abs(l - median) <= LEAN_SPREAD) ? median : 0;
 }
 
 function scan(
@@ -181,12 +303,56 @@ export function findPixelGrids(raster: PageRaster): RuledGrid[] {
     ),
   );
 
+  const fadedPieces = fadedColumnRules(raster);
+  const faded = joinCollinear(fadedPieces);
   const grids: RuledGrid[] = [];
   for (const group of groupColumns(vs)) {
-    const grid = gridFor(raster, group, hs, pieces);
+    const lo = Math.min(...group.map((v) => v.a));
+    const hi = Math.max(...group.map((v) => v.b));
+    const inside = fadedInside(group, faded, lo, hi);
+    // A faded rule next to rules of the group is one rule with them, at the
+    // place of the dark rule when that runs down most of the table (the
+    // faint halo is wider than the stroke), else at its own (a short dark
+    // piece may sit off the line). It does not move the table's top or
+    // bottom either.
+    const places = new Map<Seg, number>();
+    for (const f of inside) {
+      const near = group.filter((v) => Math.abs(v.pos - f.pos) <= MIN_COL);
+      const dark = near.find((v) => v.b - v.a >= FADED_COVER * (hi - lo));
+      for (const v of [f, ...near]) places.set(v, (dark ?? f).pos);
+    }
+    for (const v of group) v.pos = places.get(v) ?? v.pos;
+    const at = (f: Seg) => places.get(f) ?? f.pos;
+    const fit = (f: Seg, x: number) => ({ pos: x, a: Math.max(f.a, lo), b: Math.min(f.b, hi) });
+    group.push(...inside.map((f) => fit(f, at(f))));
+    // Its pieces as found: a gap in it (a label row across the columns) stays.
+    const insidePieces = fadedPieces
+      .flatMap((p) => {
+        const f = inside.find((f) => Math.abs(f.pos - p.pos) <= ALIGN && p.a <= f.b && f.a <= p.b);
+        return f ? [fit(p, at(f))] : [];
+      })
+      .filter((p) => p.b > p.a);
+    const grid = gridFor(raster, group, hs, [...pieces, ...insidePieces]);
     if (grid) grids.push(grid);
   }
   return grids;
+}
+
+/** A faded column rule counts when it runs down this share of its table. */
+const FADED_COVER = 0.8;
+
+/**
+ * The faded rules that divide the table of `group`, which runs from `lo`
+ * to `hi`: between its outer rules and running down most of its height.
+ */
+function fadedInside(group: Seg[], faded: Seg[], lo: number, hi: number): Seg[] {
+  const xs = positions(group, MIN_COL);
+  return faded.filter(
+    (f) =>
+      f.pos > xs[0]! + MIN_COL &&
+      f.pos < xs[xs.length - 1]! - MIN_COL &&
+      Math.min(f.b, hi) - Math.max(f.a, lo) >= FADED_COVER * (hi - lo),
+  );
 }
 
 /** Merge collinear pieces (same position, small gap along). */

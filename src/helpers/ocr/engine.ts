@@ -11,13 +11,24 @@ export interface OcrImage {
   png(): Uint8Array;
 }
 
+/** What an {@link OcrEngine} read in an image. */
+export interface OcrResult {
+  /** The text, lines separated by `\n`. */
+  text: string;
+  /**
+   * How sure the engine is of the text, from 0 to 1, for an engine that
+   * knows. Reported on the cell as `CellText.confidence`.
+   */
+  confidence?: number;
+}
+
 /**
  * Pluggable OCR backend. The library calls `recognize` once per table cell
- * and uses the returned text as the cell content (lines separated by `\n`).
- * An exception or an empty string marks the cell as `"failed"`.
+ * and uses the returned text as the cell content. An exception or empty
+ * text marks the cell as `"failed"`.
  */
 export interface OcrEngine {
-  recognize(image: OcrImage): Promise<string>;
+  recognize(image: OcrImage): Promise<OcrResult>;
   /** Release models and native resources. Called only for engines the library created itself. */
   dispose?(): Promise<void> | void;
 }
@@ -26,6 +37,8 @@ export interface OcrEngine {
 const PAD = 8;
 /** A pixel is ink when darker than this fraction of its local background. */
 const INK_RATIO = 0.7;
+/** A pixel is faint ink (a faded rule) when darker than this fraction. */
+const FAINT_RATIO = 0.9;
 /** Side of the tiles the background is estimated on (pt). */
 const BG_TILE = 24;
 
@@ -39,6 +52,9 @@ export class PageRaster {
   private readonly ox: number;
   private readonly oy: number;
   private inkMap: Uint8Array | null = null;
+  private faintMap: Uint8Array | null = null;
+  private skewAngle: number | undefined;
+  private bgTiles: { bg: Float64Array; tw: number; t: number; typical: number } | null = null;
   /** Pixels the despeckling removed from the ink (noise, specks). */
   private specks: Uint8Array | null = null;
 
@@ -76,40 +92,8 @@ export class PageRaster {
    */
   get ink(): Uint8Array {
     if (this.inkMap) return this.inkMap;
-    const { width: w, height: h, data } = this;
-    const t = Math.max(8, Math.round(BG_TILE * this.scale));
-    const tw = Math.ceil(w / t);
-    const th = Math.ceil(h / t);
-    const bg = new Float64Array(tw * th);
-    const hist = new Uint32Array(256);
-    for (let ty = 0; ty < th; ty++) {
-      for (let tx = 0; tx < tw; tx++) {
-        hist.fill(0);
-        let n = 0;
-        for (let y = ty * t; y < Math.min(h, (ty + 1) * t); y++) {
-          for (let x = tx * t; x < Math.min(w, (tx + 1) * t); x++) {
-            hist[data[y * w + x]!]!++;
-            n++;
-          }
-        }
-        let acc = 0;
-        let v = 255;
-        for (; v > 0; v--) {
-          acc += hist[v]!;
-          if (acc >= n * 0.1) break;
-        }
-        bg[ty * tw + tx] = v;
-      }
-    }
-    const sorted = Array.from(bg).sort((a, b) => a - b);
-    const typical = sorted[sorted.length >> 1] ?? 255;
-    const map = new Uint8Array(w * h);
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const b = Math.max(bg[Math.floor(y / t) * tw + Math.floor(x / t)]!, 0.8 * typical);
-        if (data[y * w + x]! < b * INK_RATIO) map[y * w + x] = 1;
-      }
-    }
+    const { width: w, height: h } = this;
+    const map = this.darker(INK_RATIO);
     // Scan noise and specks: an ink pixel with at most one inked neighbour
     // is dropped. Strokes of text and rules are several pixels wide at the
     // working resolution; on a coarse raster a pixel may be a whole stroke.
@@ -142,26 +126,92 @@ export class PageRaster {
   }
 
   /**
+   * 1 where a pixel is darker than FAINT_RATIO of its local background: the
+   * {@link ink} and much lighter strokes too, such as a faded or thin rule
+   * that a scan renders in light grey. Not despeckled.
+   */
+  get faintInk(): Uint8Array {
+    return (this.faintMap ??= this.darker(FAINT_RATIO));
+  }
+
+  /** 1 where a pixel is darker than `ratio` of its local background. */
+  private darker(ratio: number): Uint8Array {
+    const { width: w, height: h, data } = this;
+    const { bg, tw, t, typical } = this.background();
+    const map = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const b = Math.max(bg[Math.floor(y / t) * tw + Math.floor(x / t)]!, 0.8 * typical);
+        if (data[y * w + x]! < b * ratio) map[y * w + x] = 1;
+      }
+    }
+    return map;
+  }
+
+  /**
+   * The paper tone of each tile of BG_TILE points (its 90th brightness
+   * percentile), and of the page as a whole.
+   */
+  private background(): { bg: Float64Array; tw: number; t: number; typical: number } {
+    if (this.bgTiles) return this.bgTiles;
+    const { width: w, height: h, data } = this;
+    const t = Math.max(8, Math.round(BG_TILE * this.scale));
+    const tw = Math.ceil(w / t);
+    const th = Math.ceil(h / t);
+    const bg = new Float64Array(tw * th);
+    const hist = new Uint32Array(256);
+    for (let ty = 0; ty < th; ty++) {
+      for (let tx = 0; tx < tw; tx++) {
+        hist.fill(0);
+        let n = 0;
+        for (let y = ty * t; y < Math.min(h, (ty + 1) * t); y++) {
+          for (let x = tx * t; x < Math.min(w, (tx + 1) * t); x++) {
+            hist[data[y * w + x]!]!++;
+            n++;
+          }
+        }
+        let acc = 0;
+        let v = 255;
+        for (; v > 0; v--) {
+          acc += hist[v]!;
+          if (acc >= n * 0.1) break;
+        }
+        bg[ty * tw + tx] = v;
+      }
+    }
+    const sorted = Array.from(bg).sort((a, b) => a - b);
+    const typical = sorted[sorted.length >> 1] ?? 255;
+    return (this.bgTiles = { bg, tw, t, typical });
+  }
+
+  /**
    * The page turned upright, when it was scanned askew (0.1° to 3°): the
    * angle is the one whose horizontal projection of the ink is sharpest, as
    * text lines and rules then fall into the fewest pixel rows. Pixel
    * coordinates of the result are those of the upright page, so grid and
    * crops must both come from it.
+   *
+   * `lean` also sets upright columns that still lean by that many degrees
+   * once the rows are level (x growing with y is positive): a sheet sheared
+   * rather than turned. Both are done in one resampling, which keeps the
+   * strokes as sharp as one.
    */
-  deskewed(): PageRaster {
+  deskewed(lean = 0): PageRaster {
     const angle = this.skew();
-    if (Math.abs(angle) < 0.1) return this;
+    if (Math.abs(angle) < 0.1 && !lean) return this;
     const { width: w, height: h, data } = this;
     const a = (angle * Math.PI) / 180;
     const c = Math.cos(a);
     const s = Math.sin(a);
+    const t = Math.tan((lean * Math.PI) / 180);
     const out = new Uint8Array(w * h);
     const cx = w / 2;
     const cy = h / 2;
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        // Source position of the upright pixel (x, y); bilinear sampling.
-        const dx = x - cx;
+        // Source position of the upright pixel (x, y), through the lean and
+        // then the turn; bilinear sampling.
+        const dx = x + (y - cy) * t - cx;
         const dy = y - cy;
         const sx = c * dx - s * dy + cx;
         const sy = s * dx + c * dy + cy;
@@ -184,6 +234,10 @@ export class PageRaster {
 
   /** Skew of the page content in degrees (clockwise positive), within ±3°. */
   skew(): number {
+    return (this.skewAngle ??= this.measureSkew());
+  }
+
+  private measureSkew(): number {
     const { width: w, height: h } = this;
     const ink = this.ink;
     // A sample of the ink is enough to find the angle.

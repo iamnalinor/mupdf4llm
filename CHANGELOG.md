@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-28
+
+### Changed
+
+- **Breaking:** `OcrEngine.recognize` returns `{ text, confidence? }`
+  (the new `OcrResult` type) instead of a string. A custom engine changes
+  `return text` to `return { text }`, adding `confidence` (0 to 1) when it
+  knows one. An engine that still returns a string, or a confidence
+  outside 0 to 1, stops the conversion with an `OcrSetupError`.
+
+### Added
+
+- `confidence` on OCR cells in `PageChunk.tables[].cells`: how sure the
+  engine was, from 0 to 1; a cell read line by line gets its least sure
+  line's. The default engine reports PaddleOCR's confidence. Text-layer
+  cells, and cells from an engine that gives none, have no `confidence`.
+  The Markdown output is unchanged.
+
+### Fixed
+
+- `"auto"` also treats a font as broken when it has at least 4 different
+  control characters, whatever their share of its text. On a long table the
+  glyphs that come out as control characters were under 5% of the text,
+  and the printable gibberish of the rest was kept. Tab, line feed and the
+  other C0 controls now count as broken characters of a font.
+- Under `"auto"`, a cell whose text-layer text is not trusted but that
+  shows no ink on the page (invisible or white text) comes out empty
+  instead of keeping that text.
+- `"pixels"` keeps a long column rule (72 pt or more) with text pressed
+  against both sides of it (a small table with numbers set flush against
+  the rule and the next column's text right after it); two columns used
+  to be merged.
+- `"pixels"` sets upright the columns of a sheared scan: rows level but
+  columns leaning, as a sheet fed askew through a scanner or a printer
+  comes out. Deskewing by the rows left the column rules leaning, and cell
+  crops took pieces of them (read as "|" or "[") or cut off the digit next
+  to a rule. The lean is measured on the column rules alone, not the text
+  set against them, and corrected only when they all lean alike.
+- `"pixels"` finds column rules that a scan has faded to light grey, too
+  light to count as ink (they came out as dots, and two columns were
+  merged). They are read on a lighter threshold, and count only inside a
+  table found by its dark rules and running down most of its height, so
+  light text and show-through from the back of the sheet do not make
+  tables. A faded rule also completes a rule of which only a piece was
+  dark enough to be found.
+
 ## [0.3.1] - 2026-09-28
 
 ### Changed
@@ -360,7 +406,8 @@ docs/                           VitePress + TypeDoc documentation site
 requirements.txt`. Tests `skipIf` Python or `pymupdf4llm` is
   missing so JS-only contributors can run `bun test` cleanly.
 
-[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/iamnalinor/mupdf4llm/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/iamnalinor/mupdf4llm/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/iamnalinor/mupdf4llm/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/iamnalinor/mupdf4llm/compare/v0.2.0...v0.2.1

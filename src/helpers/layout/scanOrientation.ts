@@ -192,8 +192,8 @@ export async function upsideDown(raster: PageRaster, engine: OcrEngine): Promise
   let turned = 0;
   try {
     for (const img of lines) {
-      asIs += textPlausibility(await engine.recognize(img));
-      turned += textPlausibility(await engine.recognize(rotate180(img)));
+      asIs += textPlausibility((await engine.recognize(img)).text);
+      turned += textPlausibility((await engine.recognize(rotate180(img))).text);
     }
   } catch {
     return false;

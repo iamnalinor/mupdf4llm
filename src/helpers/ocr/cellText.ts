@@ -1,6 +1,6 @@
 import { Rect } from "../geometry";
 import type { Block, TableData, TextSource } from "../types";
-import type { OcrEngine, OcrImage, PageRaster } from "./engine";
+import type { OcrEngine, OcrImage, OcrResult, PageRaster } from "./engine";
 import { OcrSetupError } from "./rapidOcr";
 
 const BROKEN_CHAR = /[\uFFFD\uE000-\uF8FF\u0000-\u0008\u000E-\u001F]/u;
@@ -65,36 +65,57 @@ export function looksBroken(text: string): boolean {
 
 /** A font is broken with at least this many broken characters... */
 const BROKEN_FONT_MIN = 3;
-/** ...making up at least this share of its text. */
+/** ...making up at least this share of its text... */
 const BROKEN_FONT_SHARE = 0.05;
+/** ...or with at least this many different control characters, whatever their share. */
+const BROKEN_FONT_CODES = 4;
+/**
+ * A glyph's code: tab, line feed and the other C0 controls. A real space
+ * comes out as U+0020, so a control character from a font is a glyph
+ * number, not white space.
+ */
+const CONTROL_CHAR = /[\u0000-\u001F]/u;
 
 /**
- * Fonts whose text cannot be trusted: a font with a fair share of broken
- * characters (see {@link looksBroken}). A font embedded without a ToUnicode
+ * Fonts whose text cannot be trusted. A font embedded without a ToUnicode
  * map and with glyphs numbered in order of use yields control characters
  * for its first glyphs and printable ASCII gibberish for the rest, which on
- * its own passes for text. A healthy font with a symbol or two that do not
- * map (a footnote mark, a bullet) is not broken: only those cells are.
+ * its own passes for text. Such a font is told by a fair share of broken
+ * characters (see {@link looksBroken}), or, on a long table where its first
+ * glyphs are a small part of the text, by many different control
+ * characters. A healthy font with a few glyphs that do not map (a footnote
+ * mark, a bullet, ligatures in the Private Use Area) is not broken: only
+ * those cells are.
  */
 export function brokenFonts(blocks: Block[]): Set<string> {
   const bad = new Map<string, number>();
+  const codes = new Map<string, Set<string>>();
   const all = new Map<string, number>();
   for (const b of blocks) {
     if (b.type !== 0) continue;
     for (const l of b.lines) {
       for (const s of l.spans) {
         for (const ch of s.chars) {
-          if (/\s/.test(ch.c)) continue;
+          const broken = BROKEN_CHAR.test(ch.c) || CONTROL_CHAR.test(ch.c);
+          if (!broken && /\s/.test(ch.c)) continue;
           const f = fontKey(s.font, ch.fontId);
           all.set(f, (all.get(f) ?? 0) + 1);
-          if (BROKEN_CHAR.test(ch.c)) bad.set(f, (bad.get(f) ?? 0) + 1);
+          if (!broken) continue;
+          bad.set(f, (bad.get(f) ?? 0) + 1);
+          if (!CONTROL_CHAR.test(ch.c)) continue;
+          if (!codes.has(f)) codes.set(f, new Set());
+          codes.get(f)!.add(ch.c);
         }
       }
     }
   }
   return new Set(
     [...bad]
-      .filter(([f, n]) => n >= BROKEN_FONT_MIN && n >= BROKEN_FONT_SHARE * all.get(f)!)
+      .filter(
+        ([f, n]) =>
+          (n >= BROKEN_FONT_MIN && n >= BROKEN_FONT_SHARE * all.get(f)!) ||
+          (codes.get(f)?.size ?? 0) >= BROKEN_FONT_CODES,
+      )
       .map(([f]) => f),
   );
 }
@@ -153,7 +174,7 @@ export async function ocrTableCells(
       blocks,
     );
   } catch (e) {
-    if (!(keepLayer && e instanceof OcrSetupError)) throw e;
+    if (!(keepLayer && e instanceof OcrSetupError) || e instanceof OcrContractError) throw e;
     if (typeof process !== "undefined" && process.env?.DEBUG_MUPDF4LLM)
       console.warn("[mupdf4llm] OCR unavailable, keeping the text layer:", e.message);
   }
@@ -182,41 +203,82 @@ async function ocrCells(
         if (texts && trusted(texts[r]![c]!.text, Rect.from(cell))) continue;
         const whole = getRaster().crop(Rect.from(cell));
         if (!whole) {
-          // Nothing to read. Under "auto" the (empty) text layer stands.
-          if (source === "ocr") tab.setCellText(r, c, { text: "", source: "ocr" });
+          // Nothing to read: the cell is empty on the page. Under "auto" an
+          // empty text layer stands; untrusted text there is invisible (white,
+          // hidden, clipped) and goes.
+          if (source === "ocr" || texts![r]![c]!.text.trim())
+            tab.setCellText(r, c, { text: "", source: "ocr" });
           continue;
         }
-        const read = async (img: OcrImage) => {
+        const read = async (img: OcrImage): Promise<OcrResult> => {
           try {
-            return (await engine.recognize(img)).trim();
+            const res = checked(await engine.recognize(img));
+            return { ...res, text: res.text.trim() };
           } catch (e) {
             // A missing OCR package is a configuration error, not a bad cell.
             if (e instanceof OcrSetupError) throw e;
             if (typeof process !== "undefined" && process.env?.DEBUG_MUPDF4LLM)
               console.error(`[mupdf4llm] OCR failed for cell ${r},${c}:`, e);
-            return "";
+            return { text: "" };
           }
         };
-        let text = await read(whole);
+        let res = await read(whole);
+        const count = (text: string) => text.split("\n").filter(Boolean).length;
         // A detector can drop a short line from a multi-line cell; then
         // recognise the cell line by line.
         const lines = getRaster().cropLines(Rect.from(cell));
-        if (lines.length > 1 && text.split("\n").filter(Boolean).length < lines.length) {
+        if (lines.length > 1 && count(res.text) < lines.length) {
           // One call at a time: engines may not handle parallel requests.
-          const perLine: string[] = [];
+          const perLine: OcrResult[] = [];
           for (const img of lines) {
-            const t = await read(img);
-            if (t) perLine.push(t);
+            const line = await read(img);
+            if (line.text) perLine.push(line);
           }
-          if (perLine.length > text.split("\n").filter(Boolean).length) text = perLine.join("\n");
+          if (perLine.length > count(res.text)) res = joinLines(perLine);
         }
         // Only dots read (an empty value) is a result; nothing read is a
         // failure. Under "auto" a failed cell keeps its text-layer text.
-        if (text) tab.setCellText(r, c, { text: fixHomoglyphs(stripLeaders(text)), source: "ocr" });
-        else tab.setCellText(r, c, { text: texts ? texts[r]![c]!.text : "", source: "failed" });
+        if (res.text) {
+          const text = fixHomoglyphs(stripLeaders(res.text));
+          const { confidence } = res;
+          tab.setCellText(r, c, {
+            text,
+            source: "ocr",
+            ...(confidence !== undefined && { confidence }),
+          });
+        } else tab.setCellText(r, c, { text: texts ? texts[r]![c]!.text : "", source: "failed" });
       }
     }
   }
+}
+
+/**
+ * An engine that breaks the {@link OcrResult} contract: a mistake in the
+ * code that passed it, so unlike a missing OCR package it stops the
+ * conversion even where the text layer would otherwise be kept.
+ */
+class OcrContractError extends OcrSetupError {}
+
+/**
+ * An engine's result, checked against the {@link OcrResult} contract. A
+ * broken one is an engine that cannot work (a string, as engines returned
+ * before 0.4; a percentage for a confidence), not a bad cell: it stops the
+ * conversion instead of leaving every cell failed.
+ */
+function checked(res: OcrResult): OcrResult {
+  if (typeof res?.text !== "string")
+    throw new OcrContractError("OcrEngine.recognize must return { text, confidence? } (since 0.4)");
+  const { confidence: c } = res;
+  if (c !== undefined && !(typeof c === "number" && c >= 0 && c <= 1))
+    throw new OcrContractError(`OCR confidence must be a number from 0 to 1, got ${String(c)}`);
+  return res;
+}
+
+/** Lines read one by one, as one result: the least sure line sets the confidence. */
+function joinLines(lines: OcrResult[]): OcrResult {
+  const known = lines.flatMap((l) => (l.confidence === undefined ? [] : [l.confidence]));
+  const text = lines.map((l) => l.text).join("\n");
+  return known.length ? { text, confidence: Math.min(...known) } : { text };
 }
 
 /**

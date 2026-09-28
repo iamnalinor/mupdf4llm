@@ -2,25 +2,48 @@ import { test, expect, describe, spyOn } from "bun:test";
 import { readFileSync } from "node:fs";
 import * as mupdf from "mupdf";
 import { toMarkdown, toMarkdownPages, createRapidOcr, OcrSetupError, Rect } from "../src/index";
-import type { MarkdownOptions, OcrEngine, OcrImage } from "../src/index";
+import type { MarkdownOptions, OcrEngine, OcrImage, OcrResult } from "../src/index";
 import { PageRaster, grayImage } from "../src/helpers/ocr/engine";
 import { disposable } from "../src/helpers/ocr/rapidOcr";
-import { fixHomoglyphs, looksBroken } from "../src/helpers/ocr/cellText";
-import { detectRulings, rowBreaks } from "../src/helpers/tables/pixelGrid";
+import { brokenFonts, fixHomoglyphs, looksBroken } from "../src/helpers/ocr/cellText";
+import type { Block, Span } from "../src/helpers/types";
+import type { BBox } from "../src/helpers/geometry";
+import {
+  columnLean,
+  detectRulings,
+  findPixelGrids,
+  rowBreaks,
+} from "../src/helpers/tables/pixelGrid";
 import { inkAxis, textPlausibility, upsideDown } from "../src/helpers/layout/scanOrientation";
 import { degrade, type Degradation } from "./helpers/degrade";
 
 const fixture = (name: string) => new Uint8Array(readFileSync(`tests/fixtures/${name}`));
 
 /** Fake engine: answers "cell<n>" and records every image it was given. */
-function fakeEngine(answer?: (n: number) => string): OcrEngine & { calls: OcrImage[] } {
+function fakeEngine(answer?: (n: number) => string | OcrResult): OcrEngine & { calls: OcrImage[] } {
   const calls: OcrImage[] = [];
   return {
     calls,
     async recognize(img) {
       calls.push(img);
-      return answer ? answer(calls.length) : `cell${calls.length}`;
+      const a = answer ? answer(calls.length) : `cell${calls.length}`;
+      return typeof a === "string" ? { text: a } : a;
     },
+  };
+}
+
+/** A text block of one line and one span, each character with a font id of 0. */
+function textBlock(font: string, text: string): Block {
+  const chars = [...text].map((c, i) => ({
+    c,
+    bbox: [i * 5, 0, i * 5 + 5, 10] as BBox,
+    fontId: 0,
+  }));
+  const span = { font, text, chars } as unknown as Span;
+  return {
+    type: 0,
+    bbox: [0, 0, text.length * 5, 10],
+    lines: [{ bbox: [0, 0, 1, 1], dir: [1, 0], wmode: 0, spans: [span] }],
   };
 }
 
@@ -34,10 +57,12 @@ test("await using disposes an engine made disposable, as createRapidOcr returns 
   let disposed = 0;
   {
     await using ocr = disposable({
-      recognize: async (_img: OcrImage) => "x",
+      recognize: async (_img: OcrImage) => ({ text: "x" }),
       dispose: async () => void disposed++,
     });
-    expect(await ocr.recognize(grayImage(new Uint8Array(1).fill(255), 1, 1))).toBe("x");
+    expect(await ocr.recognize(grayImage(new Uint8Array(1).fill(255), 1, 1))).toEqual({
+      text: "x",
+    });
     expect(disposed).toBe(0);
   }
   expect(disposed).toBe(1);
@@ -100,6 +125,130 @@ describe("detectRulings", () => {
     expect(h.map((e) => Math.round(e.y))).toEqual([34, 100]);
     expect(h.every((e) => e.x0 < 35 && e.x1 > 365)).toBe(true);
     expect(v.map((e) => Math.round(e.x)).sort((a, b) => a - b)).toEqual([34, 366]);
+  });
+
+  test("a column rule with text pressed against both sides is kept", () => {
+    const { data, fill } = raster();
+    fill(299, 50, 301, 350); // v rule, 2px
+    // A dense small table: lines of "glyphs" 8px tall, 4px apart, ending a
+    // pixel left of the rule (right-aligned numbers) and starting a pixel
+    // right of it (the next column's text).
+    for (let y = 52; y < 346; y += 12) {
+      fill(280, y, 298, y + 8);
+      fill(302, y, 330, y + 8);
+    }
+    const v = detectRulings(new PageRaster(data, W, H, 1.5)).filter((e) => e.kind === "v");
+    expect(v.map((e) => Math.round(e.x))).toEqual([200]);
+  });
+
+  test("a faded column rule inside a table divides it; faint strokes elsewhere do not", () => {
+    const { data, fill } = raster();
+    fill(50, 50, 550, 52); // h rules, dark
+    fill(50, 350, 550, 352);
+    fill(50, 50, 52, 352); // outer v rules, dark
+    fill(548, 50, 550, 352);
+    fill(299, 50, 301, 350, 205); // inner v rule, faded to light grey
+    fill(420, 50, 422, 350, 205); // inner v rule, faded but for a dark piece
+    fill(420, 200, 422, 260);
+    fill(575, 60, 577, 390, 205); // a faint stroke outside the table
+    // Dark "text" lines, 8px tall and 4px apart.
+    for (let y = 56; y < 340; y += 12) fill(200, y, 290, y + 8);
+    const grids = findPixelGrids(new PageRaster(data, W, H, 1.5));
+    expect(grids.length).toBe(1);
+    const xs = [...new Set(grids[0]!.vLines.map((v) => Math.round(v.x)))].sort((a, b) => a - b);
+    expect(xs).toEqual([34, 200, 281, 366]);
+    // The completed rule runs the table's height, not just its dark piece.
+    const done = grids[0]!.vLines.filter((v) => Math.round(v.x) === 281);
+    expect(done.reduce((n, v) => n + v.y1 - v.y0, 0)).toBeGreaterThan(190);
+  });
+
+  test("a faint halo along a dark rule moves no border of the table", () => {
+    const grid = (halo: boolean) => {
+      const { data, fill } = raster();
+      fill(50, 50, 550, 52);
+      fill(50, 350, 550, 352);
+      fill(50, 50, 52, 352);
+      fill(548, 50, 550, 352);
+      fill(299, 50, 301, 352); // inner v rule, dark
+      if (halo) fill(296, 44, 299, 358, 205); // its halo, longer and to the left
+      for (let y = 56; y < 340; y += 12) fill(200, y, 290, y + 8);
+      const [g] = findPixelGrids(new PageRaster(data, W, H, 1.5));
+      return {
+        xs: [...new Set(g!.vLines.map((v) => v.x))].sort((a, b) => a - b),
+        ys: g!.hLines.map((h) => h.y),
+      };
+    };
+    expect(grid(true)).toEqual(grid(false));
+  });
+
+  test("columnLean: the lean column rules share, none when they fan out", () => {
+    const rules = (leans: number[]) => {
+      const { data, fill } = raster();
+      leans.forEach((deg, k) => {
+        const t = Math.tan((deg * Math.PI) / 180);
+        for (let y = 20; y < 380; y++) {
+          const x = Math.round(100 + k * 150 + (y - 200) * t);
+          fill(x, y, x + 2, y + 1);
+        }
+      });
+      return new PageRaster(data, W, H, 1.5);
+    };
+    expect(columnLean(rules([0.6, 0.6, 0.6]))).toBeCloseTo(0.6, 1);
+    expect(columnLean(rules([0.5, 0, -0.5]))).toBe(0);
+    expect(columnLean(rules([0, 0, 0]))).toBeCloseTo(0, 2);
+    // Past the ±3° a scan can be askew, a lean is no shear to set right.
+    expect(columnLean(rules([5, 5, 5]))).toBe(0);
+  });
+
+  test("columnLean: figures set flush against the rules do not flatten the lean", () => {
+    const lean = (figures: boolean) => {
+      const { data, fill } = raster();
+      const t = Math.tan((0.5 * Math.PI) / 180);
+      for (let k = 0; k < 3; k++) {
+        const at = (y: number) => Math.round(100 + k * 150 + (y - 200) * t);
+        for (let y = 20; y < 380; y++) fill(at(y), y, at(y) + 2, y + 1);
+        // A figure 6px wide and 8px tall in each 12px row, ending 2px
+        // (1.5pt) left of the rule, as right-aligned numbers are set.
+        if (figures)
+          for (let y = 22; y < 370; y += 12) fill(at(y + 4) - 8, y, at(y + 4) - 2, y + 8);
+      }
+      return columnLean(new PageRaster(data, W, H, 1.5));
+    };
+    // The point: figures change nothing. The staircase of a 1.5-scale
+    // raster already reads a little under 0.5° without them.
+    expect(lean(true)).toBeCloseTo(lean(false), 2);
+    expect(Math.abs(lean(true) - 0.5)).toBeLessThan(0.05);
+  });
+
+  test("columnLean: a steep lean with figures flush against the rules is measured whole", () => {
+    // 300 dpi-ish, long rules leaning 2°: they drift across the first
+    // window, which then catches the edge of the figures beside them.
+    const w = 1400;
+    const h = 2900;
+    const lean = (figures: boolean, gap: number) => {
+      const data = new Uint8Array(w * h).fill(255);
+      const fill = (x0: number, y0: number, x1: number, y1: number) => {
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) data[y * w + x] = 0;
+      };
+      const t = Math.tan((2 * Math.PI) / 180);
+      for (let k = 0; k < 4; k++) {
+        const at = (y: number) => Math.round(250 + k * 300 + (y - 1450) * t);
+        for (let y = 50; y < 2850; y++) fill(at(y), y, at(y) + 4, y + 1);
+        if (figures)
+          for (let y = 60; y < 2820; y += 50)
+            fill(at(y + 15) - gap - 25, y, at(y + 15) - gap, y + 30);
+      }
+      return columnLean(new PageRaster(data, w, h, 300 / 72));
+    };
+    const bare = lean(false, 0);
+    expect(Math.abs(bare - 2)).toBeLessThan(0.05);
+    for (const gap of [0, 2, 3]) expect(Math.abs(lean(true, gap) - bare)).toBeLessThan(0.02);
+  });
+
+  test("columnLean measures a sheared scan's true lean", async () => {
+    const doc = mupdf.Document.openDocument(fixture("sheared-scan-grid.pdf"), "application/pdf");
+    const upright = PageRaster.render(doc.loadPage(0) as mupdf.Page, 300).deskewed();
+    expect(Math.abs(Math.abs(columnLean(upright)) - 0.5)).toBeLessThan(0.03);
   });
 
   test("a slightly skewed rule stays one edge", () => {
@@ -236,6 +385,26 @@ describe("pixels strategy on a scan", () => {
     expect(Math.abs(t.bbox[2] - 520)).toBeLessThan(1.5);
   });
 
+  test("leaning columns on level rows are set upright: no crop takes a piece of a rule", async () => {
+    const ocr = fakeEngine();
+    const [page] = await toMarkdownPages(fixture("sheared-scan-grid.pdf"), {
+      tableStrategy: "pixels",
+      ocr,
+    });
+    const t = page!.tables[0]!;
+    expect([t.rows, t.columns]).toEqual([40, 4]);
+    // A rule piece is a pixel column of the crop that is dark most of the way down.
+    const rulePiece = (img: OcrImage) => {
+      for (let x = 0; x < img.width; x++) {
+        let dark = 0;
+        for (let y = 0; y < img.height; y++) if (img.data[y * img.width + x]! < 128) dark++;
+        if (dark > 0.6 * img.height) return true;
+      }
+      return false;
+    };
+    expect(ocr.calls.filter(rulePiece).length).toBe(0);
+  });
+
   test("auto deskews a page without a text layer, as ocr does", async () => {
     const buf = degrade(fixture("scan-ru-census-1918.pdf"), { deg: 1.5 });
     const crops = async (textSource: "auto" | "ocr") => {
@@ -255,7 +424,7 @@ describe("pixels strategy on a scan", () => {
       async recognize() {
         n++;
         if (n % 2) throw new Error("boom");
-        return "";
+        return { text: "" };
       },
     };
     const [page] = await toMarkdownPages(fixture("scanned-grid.pdf"), {
@@ -412,6 +581,61 @@ test("OCR text of a cell gets its look-alike letters fixed", async () => {
   expect(page!.tables[0]!.cells[0]![0]!.text).toBe("Москва");
 });
 
+describe("OCR confidence", () => {
+  test("a cell carries the confidence its engine gave", async () => {
+    const [page] = await toMarkdownPages(fixture("scanned-grid.pdf"), {
+      tableStrategy: "pixels",
+      ocr: fakeEngine((n) => ({ text: `cell${n}`, confidence: n / 100 })),
+    });
+    const cells = page!.tables[0]!.cells.flat();
+    expect(cells.every((c) => c?.source === "ocr")).toBe(true);
+    expect(cells.map((c) => c!.confidence)).toEqual(cells.map((_, i) => (i + 1) / 100));
+  });
+
+  test("a cell read line by line takes its least confident line", async () => {
+    // Calls alternate 0.9 and 0.3: two lines read one after the other
+    // always include a 0.3.
+    const [page] = await toMarkdownPages(fixture("scan-ru-census-1918.pdf"), {
+      tableStrategy: "pixels",
+      ocr: fakeEngine((n) => ({ text: "x", confidence: n % 2 ? 0.9 : 0.3 })),
+    });
+    const multi = page!.tables.flatMap((t) => t.cells.flat()).filter((c) => c?.text.includes("\n"));
+    expect(multi.length).toBeGreaterThan(0);
+    expect(multi.every((c) => c!.confidence === 0.3)).toBe(true);
+  });
+
+  test("an engine that breaks the result contract stops the conversion, saying why", async () => {
+    const run = (result: unknown) =>
+      toMarkdown(fixture("scanned-grid.pdf"), {
+        tableStrategy: "pixels",
+        ocr: { recognize: async () => result } as unknown as OcrEngine,
+      });
+    // A string, as engines returned before 0.4.
+    await expect(run("text")).rejects.toThrow(OcrSetupError);
+    await expect(run("text")).rejects.toThrow("{ text, confidence? }");
+    // A confidence out of 0..1 (a percentage).
+    await expect(run({ text: "a", confidence: 87 })).rejects.toThrow(OcrSetupError);
+    await expect(run({ text: "a", confidence: NaN })).rejects.toThrow(OcrSetupError);
+    // Also where the default keeps the text layer when OCR cannot be set up.
+    await expect(
+      toMarkdown(fixture("broken-text-grid.pdf"), {
+        ocr: { recognize: async () => "text" } as unknown as OcrEngine,
+      }),
+    ).rejects.toThrow("{ text, confidence? }");
+  });
+
+  test("no confidence from the engine, none on the cell; none on text-layer cells", async () => {
+    const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"), {
+      textSource: "auto",
+      ocr: fakeEngine(),
+    });
+    const cells = page!.tables[0]!.cells.flat();
+    expect(cells.some((c) => c?.source === "ocr")).toBe(true);
+    expect(cells.some((c) => c?.source === "pdf")).toBe(true);
+    expect(cells.every((c) => c && !("confidence" in c))).toBe(true);
+  });
+});
+
 describe("auto with a font whose codes are broken", () => {
   test("every cell set in that font is OCRed, even the ones that look printable", async () => {
     const ocr = fakeEngine();
@@ -429,6 +653,35 @@ describe("auto with a font whose codes are broken", () => {
       "12,50",
     ]);
     expect(ocr.calls.length).toBe(20);
+  });
+
+  test("a font is broken by many distinct bad codes, however much good-looking text it has", () => {
+    // Glyphs numbered in order of use: the first 31 come out as control
+    // characters (tab and newline among them), the rest as printable ASCII.
+    const bad = Array.from({ length: 31 }, (_, i) => String.fromCharCode(i + 1)).join("");
+    const text = bad + "Q#7w)K(+b:X2!zR".repeat(60);
+    expect(brokenFonts([textBlock("Type3", text)])).toEqual(new Set(["Type3#0"]));
+    // One unmapped footnote mark, used a lot, does not condemn its font.
+    const marks = "\uE000Region North".repeat(4) + "Count Share Total".repeat(20);
+    expect(brokenFonts([textBlock("Helvetica", marks)])).toEqual(new Set());
+    // Nor do a few ligatures mapped to the Private Use Area (fi, fl, ff, ffi).
+    const ligatures =
+      "The \uF001rst \uF002oor, the o\uF003ce, the su\uF004x. " +
+      "Plain words of body text around them. ".repeat(20);
+    expect(brokenFonts([textBlock("Minion", ligatures)])).toEqual(new Set());
+  });
+
+  test("a long table in such a font is OCRed as a whole", async () => {
+    const ocr = fakeEngine();
+    const [page] = await toMarkdownPages(fixture("type3-no-tounicode-long-grid.pdf"), {
+      textSource: "auto",
+      ocr,
+    });
+    const [broken, fine] = page!.tables;
+    expect(broken!.cells.flat().every((c) => c?.source === "ocr")).toBe(true);
+    expect(fine!.cells.flat().every((c) => c?.source === "pdf")).toBe(true);
+    // Invisible text in that font: the page shows the cell empty.
+    expect(broken!.cells[3]![3]!.text).toBe("");
   });
 
   test("a few bad symbols in a healthy font OCR only their own cells", async () => {
@@ -500,8 +753,9 @@ const hasRapidOcr = (() => {
 // ---------------------------------------------------------------------------
 
 /** [rows, columns] of each table found with `tableStrategy: "pixels"`. */
-async function scanShapes(name: string): Promise<number[][]> {
-  const pages = await toMarkdownPages(fixture(name), {
+async function scanShapes(name: string, how?: Degradation): Promise<number[][]> {
+  const buf = how ? degrade(fixture(name), how) : fixture(name);
+  const pages = await toMarkdownPages(buf, {
     tableStrategy: "pixels",
     ocr: fakeEngine(),
   });
@@ -646,7 +900,7 @@ describe("scans turned a quarter without /Rotate", () => {
       for (let y = 0; y < img.height; y++)
         for (let x = 0; x < img.width; x++)
           if (img.data[y * img.width + x]! < 128) y < img.height / 2 ? top++ : bottom++;
-      return top > bottom ? "word word word" : "' , . ı";
+      return { text: top > bottom ? "word word word" : "' , . ı" };
     },
   });
 
@@ -744,6 +998,18 @@ describe("pixels strategy on real scans", () => {
       [14, 7],
     ]);
   });
+
+  test("short dark runs by a column's digits are not column rules", async () => {
+    // A torn edge or a blot beside a column of figures makes a vertical run
+    // just over the minimum length, with ink on both sides.
+    expect(await scanShapes("scan-in-abstract-1901-table.pdf")).toEqual([[28, 10]]);
+    const rough = { deg: -2, sigma: 12, speck: 0.002 };
+    expect(await scanShapes("scan-gb-abstract-1908-table.pdf", rough)).toEqual([[52, 9]]);
+    expect(await scanShapes("scan-us-census-1900.pdf", rough)).toEqual([
+      [18, 10],
+      [15, 7],
+    ]);
+  }, 60_000);
 
   test("Russian census 1918: dense rows, values on the last line of an entry", async () => {
     // Header, entries 7-24, total.
@@ -874,7 +1140,7 @@ describe("pixels strategy on real scans", () => {
         most = Math.max(most, ++running);
         await new Promise((r) => setTimeout(r, 1));
         running--;
-        return "a";
+        return { text: "a" };
       },
     };
     await toMarkdown(fixture("scan-ru-census-1918.pdf"), { tableStrategy: "pixels", ocr });
