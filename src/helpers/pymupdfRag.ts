@@ -483,10 +483,11 @@ async function convert(
             if (pixels) {
               raster = PageRaster.render(page, ocrDpi);
               if (textSource === "ocr" || (textSource === "auto" && !hasTextLayer(td.blocks))) {
-                raster = raster.deskewed();
-                // Level rows do not make upright columns on a sheared sheet.
-                const lean = columnLean(raster);
-                if (Math.abs(lean) >= 0.1) raster = raster.unleaned(lean);
+                // Level rows do not make upright columns on a sheared sheet;
+                // then turn and unshear in one resampling.
+                const upright = raster.deskewed();
+                const lean = columnLean(upright);
+                raster = Math.abs(lean) >= 0.1 ? raster.deskewed(lean) : upright;
               }
             }
             tabs = raster
