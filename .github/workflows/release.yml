@@ -1,12 +1,17 @@
 name: Release
 
+# Runs only after CI has passed on main, so lint/tests are not repeated here.
 on:
-  push:
-    branches: ["main"]
-    paths: ["package.json"]
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
 
 jobs:
   check-version:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.check.outputs.changed }}
@@ -14,6 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 2
 
       - name: Check if version field changed
@@ -38,6 +44,8 @@ jobs:
       id-token: write # enables OIDC Trusted Publishing — no NPM_TOKEN required
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -51,22 +59,8 @@ jobs:
       - name: Upgrade npm (Trusted Publishing requires >= 11.5.1)
         run: npm install -g npm@latest
 
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install pymupdf4llm (for parity tests)
-        run: pip install -r requirements.txt
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
-      - name: Lint (Prettier + ESLint + tsc)
-        run: bun run lint:check
-
-      - name: Run parity tests
-        run: bun test
 
       - name: Build
         run: bun run build
@@ -78,5 +72,7 @@ jobs:
           git tag "v${{ needs.check-version.outputs.version }}"
           git push origin "v${{ needs.check-version.outputs.version }}"
 
+      # --ignore-scripts skips prepublishOnly (typecheck + test + build):
+      # CI already checked this commit and the build step above just ran.
       - name: Publish to npm (Trusted Publishing)
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --ignore-scripts

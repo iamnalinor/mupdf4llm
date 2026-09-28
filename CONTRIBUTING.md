@@ -170,6 +170,10 @@ Documentation is built with [VitePress](https://vitepress.dev/) +
 5. `bun run build` — emit dist artifacts
 6. `npm pack --dry-run` — verify the published tarball
 
+`.github/workflows/release.yml` fires after CI succeeds on a push to
+`main`. If that commit bumped `version` in `package.json`, it builds,
+tags `v<version>` and runs `npm publish` — without re-running lint or tests.
+
 ## License
 
 By contributing you agree that your contributions are licensed under
