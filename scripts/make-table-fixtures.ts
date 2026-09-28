@@ -457,8 +457,6 @@ function brokenTextGrid() {
  * ASCII gibberish. The second table is in Helvetica and reads fine.
  */
 function type3NoUnicodeGrid() {
-  const doc = new mupdf.PDFDocument();
-  const good = doc.addSimpleFont(new mupdf.Font("Helvetica"));
   const rows = [
     ["Code", "Placeholder name", "Group", "Points"],
     ["1", "Quartz Jumping Fox", "Alpha", "12,50"],
@@ -466,6 +464,49 @@ function type3NoUnicodeGrid() {
     ["3", "Hazy Mellow Kite", "Sigma", "40,75"],
     ["4", "Oblique Pixel Dune", "Omega", "63,00"],
   ];
+  type3Grid("type3-no-tounicode-grid.pdf", rows, rows, 24, 11, 560);
+}
+
+/**
+ * The same font on a long table: the glyphs that come out as control
+ * characters are under 5% of its text, the rest is printable gibberish.
+ * The last cell of row 3 is invisible text (render mode 3): the page shows
+ * it empty.
+ */
+function type3NoUnicodeLongGrid() {
+  const names = [
+    "Quartz Jumping Fox",
+    "Brisk Violet Wyvern",
+    "Hazy Mellow Kite",
+    "Oblique Pixel Dune",
+  ];
+  const groups = ["Alpha", "Delta", "Sigma", "Omega"];
+  const rows = [["Code", "Placeholder name", "Group", "Points"]];
+  for (let i = 1; i <= 36; i++)
+    rows.push([
+      String(i),
+      names[i % 4]!,
+      groups[(i >> 2) % 4]!,
+      `${(i * 37) % 100},${(i * 13) % 100}`,
+    ]);
+  type3Grid("type3-no-tounicode-long-grid.pdf", rows, rows.slice(0, 5), 14, 9, 200, [3, 3]);
+}
+
+/**
+ * Two tables on one page: `rows` in the Type3 font, `plain` in Helvetica
+ * at `second` (its top), and a heading in the Type3 font that uses up the first glyphs.
+ */
+function type3Grid(
+  file: string,
+  rows: string[][],
+  plain: string[][],
+  ROW: number,
+  size: number,
+  second: number,
+  hidden?: [number, number],
+) {
+  const doc = new mupdf.PDFDocument();
+  const good = doc.addSimpleFont(new mupdf.Font("Helvetica"));
   const heading = "#$%&*+-/:;<=>?@[]^_{|}~!EILNRTUXYZ";
   // Glyph numbers by first use; each glyph is drawn as a plain bar.
   const codes = new Map<string, number>();
@@ -499,26 +540,28 @@ function type3NoUnicodeGrid() {
   const hex = (s: string) =>
     [...s].map((ch) => codes.get(ch)!.toString(16).padStart(2, "0")).join("");
   const cols = [60, 110, 300, 400, 520];
-  const ROW = 24;
-  const table = (top: number, font: string) => {
+  const table = (top: number, font: string, body: string[][]) => {
     let c = "0 G 1 w\n";
-    for (let r = 0; r <= rows.length; r++)
+    for (let r = 0; r <= body.length; r++)
       c += `${cols[0]} ${top - r * ROW} m ${cols.at(-1)} ${top - r * ROW} l S\n`;
-    for (const x of cols) c += `${x} ${top} m ${x} ${top - rows.length * ROW} l S\n`;
-    rows.forEach((row, r) =>
+    for (const x of cols) c += `${x} ${top} m ${x} ${top - body.length * ROW} l S\n`;
+    body.forEach((row, r) =>
       row.forEach((v, k) => {
         const s = font === "F2" ? `<${hex(v)}>` : `(${v})`;
-        c += `BT /${font} 11 Tf ${cols[k]! + 6} ${top - r * ROW - 16} Td ${s} Tj ET\n`;
+        const mode = font === "F2" && hidden?.[0] === r && hidden[1] === k ? "3 Tr " : "";
+        c += `BT ${mode}/${font} ${size} Tf ${cols[k]! + 6} ${top - r * ROW - (ROW * 2) / 3} Td ${s} Tj ET\n`;
       }),
     );
     return c;
   };
   const resources = doc.addObject({ Font: { F1: good, F2: t3 } });
   const content =
-    `BT /F2 11 Tf 60 790 Td <${hex(heading)}> Tj ET\n` + table(760, "F2") + table(560, "F1");
+    `BT /F2 11 Tf 60 790 Td <${hex(heading)}> Tj ET\n` +
+    table(760, "F2", rows) +
+    table(second, "F1", plain);
   doc.insertPage(-1, doc.addPage([0, 0, W, H], 0, resources, content));
-  writeFileSync(`${OUT}/type3-no-tounicode-grid.pdf`, doc.saveToBuffer("compress").asUint8Array());
-  console.log(`wrote ${OUT}/type3-no-tounicode-grid.pdf`);
+  writeFileSync(`${OUT}/${file}`, doc.saveToBuffer("compress").asUint8Array());
+  console.log(`wrote ${OUT}/${file}`);
 }
 
 /**
@@ -605,6 +648,7 @@ const all: Record<string, () => void> = {
   scannedGrid,
   brokenTextGrid,
   type3NoUnicodeGrid,
+  type3NoUnicodeLongGrid,
   footnoteMarksGrid,
   mergedRowGrid,
 };

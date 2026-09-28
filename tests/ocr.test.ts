@@ -5,7 +5,9 @@ import { toMarkdown, toMarkdownPages, createRapidOcr, OcrSetupError, Rect } from
 import type { MarkdownOptions, OcrEngine, OcrImage } from "../src/index";
 import { PageRaster, grayImage } from "../src/helpers/ocr/engine";
 import { disposable } from "../src/helpers/ocr/rapidOcr";
-import { fixHomoglyphs, looksBroken } from "../src/helpers/ocr/cellText";
+import { brokenFonts, fixHomoglyphs, looksBroken } from "../src/helpers/ocr/cellText";
+import type { Block, Span } from "../src/helpers/types";
+import type { BBox } from "../src/helpers/geometry";
 import { detectRulings, rowBreaks } from "../src/helpers/tables/pixelGrid";
 import { inkAxis, textPlausibility, upsideDown } from "../src/helpers/layout/scanOrientation";
 import { degrade, type Degradation } from "./helpers/degrade";
@@ -21,6 +23,21 @@ function fakeEngine(answer?: (n: number) => string): OcrEngine & { calls: OcrIma
       calls.push(img);
       return answer ? answer(calls.length) : `cell${calls.length}`;
     },
+  };
+}
+
+/** A text block of one line and one span, each character with a font id of 0. */
+function textBlock(font: string, text: string): Block {
+  const chars = [...text].map((c, i) => ({
+    c,
+    bbox: [i * 5, 0, i * 5 + 5, 10] as BBox,
+    fontId: 0,
+  }));
+  const span = { font, text, chars } as unknown as Span;
+  return {
+    type: 0,
+    bbox: [0, 0, text.length * 5, 10],
+    lines: [{ bbox: [0, 0, 1, 1], dir: [1, 0], wmode: 0, spans: [span] }],
   };
 }
 
@@ -429,6 +446,30 @@ describe("auto with a font whose codes are broken", () => {
       "12,50",
     ]);
     expect(ocr.calls.length).toBe(20);
+  });
+
+  test("a font is broken by many distinct bad codes, however much good-looking text it has", () => {
+    // Glyphs numbered in order of use: the first 31 come out as control
+    // characters (tab and newline among them), the rest as printable ASCII.
+    const bad = Array.from({ length: 31 }, (_, i) => String.fromCharCode(i + 1)).join("");
+    const text = bad + "Q#7w)K(+b:X2!zR".repeat(60);
+    expect(brokenFonts([textBlock("Type3", text)])).toEqual(new Set(["Type3#0"]));
+    // One unmapped footnote mark, used a lot, does not condemn its font.
+    const marks = "\uE000Region North".repeat(4) + "Count Share Total".repeat(20);
+    expect(brokenFonts([textBlock("Helvetica", marks)])).toEqual(new Set());
+  });
+
+  test("a long table in such a font is OCRed as a whole", async () => {
+    const ocr = fakeEngine();
+    const [page] = await toMarkdownPages(fixture("type3-no-tounicode-long-grid.pdf"), {
+      textSource: "auto",
+      ocr,
+    });
+    const [broken, fine] = page!.tables;
+    expect(broken!.cells.flat().every((c) => c?.source === "ocr")).toBe(true);
+    expect(fine!.cells.flat().every((c) => c?.source === "pdf")).toBe(true);
+    // Invisible text in that font: the page shows the cell empty.
+    expect(broken!.cells[3]![3]!.text).toBe("");
   });
 
   test("a few bad symbols in a healthy font OCR only their own cells", async () => {

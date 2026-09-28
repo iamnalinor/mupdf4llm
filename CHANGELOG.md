@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `"auto"` also treats a font as broken when it has at least 4 different
+  broken codes, whatever their share of its text. On a long table the
+  glyphs that come out as control characters were under 5% of the text,
+  and the printable gibberish of the rest was kept. Tab, line feed and the
+  other C0 controls now count as broken characters of a font.
+- Under `"auto"`, a cell whose text-layer text is not trusted but that
+  shows no ink on the page (invisible or white text) comes out empty
+  instead of keeping that text.
+
 ## [0.3.1] - 2026-09-28
 
 ### Changed

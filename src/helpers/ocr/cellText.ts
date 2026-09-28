@@ -65,36 +65,55 @@ export function looksBroken(text: string): boolean {
 
 /** A font is broken with at least this many broken characters... */
 const BROKEN_FONT_MIN = 3;
-/** ...making up at least this share of its text. */
+/** ...making up at least this share of its text... */
 const BROKEN_FONT_SHARE = 0.05;
+/** ...or with at least this many different broken codes, whatever their share. */
+const BROKEN_FONT_CODES = 4;
+/**
+ * A glyph's code: tab, line feed and the other C0 controls. A real space
+ * comes out as U+0020, so a control character from a font is a glyph
+ * number, not white space.
+ */
+const CONTROL_CHAR = /[\u0000-\u001F]/u;
 
 /**
- * Fonts whose text cannot be trusted: a font with a fair share of broken
- * characters (see {@link looksBroken}). A font embedded without a ToUnicode
+ * Fonts whose text cannot be trusted. A font embedded without a ToUnicode
  * map and with glyphs numbered in order of use yields control characters
  * for its first glyphs and printable ASCII gibberish for the rest, which on
- * its own passes for text. A healthy font with a symbol or two that do not
- * map (a footnote mark, a bullet) is not broken: only those cells are.
+ * its own passes for text. Such a font is told by a fair share of broken
+ * characters (see {@link looksBroken}), or, on a long table where its first
+ * glyphs are a small part of the text, by many different ones. A healthy
+ * font with a symbol or two that do not map (a footnote mark, a bullet) is
+ * not broken: only those cells are.
  */
 export function brokenFonts(blocks: Block[]): Set<string> {
   const bad = new Map<string, number>();
+  const codes = new Map<string, Set<string>>();
   const all = new Map<string, number>();
   for (const b of blocks) {
     if (b.type !== 0) continue;
     for (const l of b.lines) {
       for (const s of l.spans) {
         for (const ch of s.chars) {
-          if (/\s/.test(ch.c)) continue;
+          const broken = BROKEN_CHAR.test(ch.c) || CONTROL_CHAR.test(ch.c);
+          if (!broken && /\s/.test(ch.c)) continue;
           const f = fontKey(s.font, ch.fontId);
           all.set(f, (all.get(f) ?? 0) + 1);
-          if (BROKEN_CHAR.test(ch.c)) bad.set(f, (bad.get(f) ?? 0) + 1);
+          if (!broken) continue;
+          bad.set(f, (bad.get(f) ?? 0) + 1);
+          if (!codes.has(f)) codes.set(f, new Set());
+          codes.get(f)!.add(ch.c);
         }
       }
     }
   }
   return new Set(
     [...bad]
-      .filter(([f, n]) => n >= BROKEN_FONT_MIN && n >= BROKEN_FONT_SHARE * all.get(f)!)
+      .filter(
+        ([f, n]) =>
+          (n >= BROKEN_FONT_MIN && n >= BROKEN_FONT_SHARE * all.get(f)!) ||
+          codes.get(f)!.size >= BROKEN_FONT_CODES,
+      )
       .map(([f]) => f),
   );
 }
@@ -182,8 +201,11 @@ async function ocrCells(
         if (texts && trusted(texts[r]![c]!.text, Rect.from(cell))) continue;
         const whole = getRaster().crop(Rect.from(cell));
         if (!whole) {
-          // Nothing to read. Under "auto" the (empty) text layer stands.
-          if (source === "ocr") tab.setCellText(r, c, { text: "", source: "ocr" });
+          // Nothing to read: the cell is empty on the page. Under "auto" an
+          // empty text layer stands; untrusted text there is invisible (white,
+          // hidden, clipped) and goes.
+          if (source === "ocr" || texts![r]![c]!.text.trim())
+            tab.setCellText(r, c, { text: "", source: "ocr" });
           continue;
         }
         const read = async (img: OcrImage) => {
