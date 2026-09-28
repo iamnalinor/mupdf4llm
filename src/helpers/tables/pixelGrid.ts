@@ -114,45 +114,67 @@ const LEAN_SPREAD = 0.15;
  * than turned (fed askew through a scanner or a printer) has level rows
  * but leaning columns, and deskewing it by its rows leaves the columns
  * leaning. Each rule's lean is fitted to the middle of its ink along its
- * length. Rules that lean differently (a curled page), or further than
+ * length, twice: the second time on a narrow window along the first line,
+ * so that text set flush against the rule does not pull the fit. Rules that lean differently (a curled page), or further than
  * LEAN_MAX, give 0.
  */
 export function columnLean(raster: PageRaster): number {
   const { width: w, scale } = raster;
   const ink = raster.ink;
-  const half = Math.max(2, Math.round(3 * scale));
-  const maxThick = Math.max(2, scale * 4);
   const step = Math.max(1, Math.round(2 * scale));
   const leans: number[] = [];
   for (const e of detectRulings(raster)) {
     if (e.kind !== "v" || e.y1 - e.y0 < LEAN_RULE) continue;
-    const cx = raster.pixelX(e.x);
-    // Least-squares fit of x against y over the rule's ink.
-    let n = 0;
-    let sy = 0;
-    let sx = 0;
-    let syy = 0;
-    let sxy = 0;
-    for (let y = raster.pixelY(e.y0); y <= raster.pixelY(e.y1); y += step) {
-      let m = 0;
-      let mx = 0;
-      for (let x = Math.max(0, cx - half); x <= Math.min(w - 1, cx + half); x++)
-        if (ink[y * w + x]) {
-          m++;
-          mx += x;
+    const y0 = raster.pixelY(e.y0);
+    const y1 = raster.pixelY(e.y1);
+    const stroke = Math.max(2, Math.ceil(e.width * scale) + 2);
+    // Least-squares fit of x against y over the middle of the rule within
+    // `half` pixels of `center(y)`.
+    const fit = (center: (y: number) => number, half: number) => {
+      let n = 0;
+      let sy = 0;
+      let sx = 0;
+      let syy = 0;
+      let sxy = 0;
+      for (let y = y0; y <= y1; y += step) {
+        const c = Math.round(center(y));
+        // The ink in the window must be one run no wider than the stroke:
+        // a second run is a figure beside the rule, a wide one a crossing.
+        let runs = 0;
+        let a = -1;
+        let b = -1;
+        for (let x = Math.max(0, c - half); x <= Math.min(w - 1, c + half); x++) {
+          if (!ink[y * w + x]) continue;
+          if (x !== b + 1) {
+            runs++;
+            a = x;
+          }
+          b = x;
         }
-      // Skip rows where a row rule or text crosses it.
-      if (!m || m > maxThick) continue;
-      const x = mx / m;
-      n++;
-      sy += y;
-      sx += x;
-      syy += y * y;
-      sxy += x * y;
-    }
-    const d = n * syy - sy * sy;
-    if (n < 10 || !d) continue;
-    leans.push((Math.atan((n * sxy - sx * sy) / d) * 180) / Math.PI);
+        if (runs !== 1 || b - a + 1 > stroke) continue;
+        const x = (a + b) / 2;
+        n++;
+        sy += y;
+        sx += x;
+        syy += y * y;
+        sxy += x * y;
+      }
+      const d = n * syy - sy * sy;
+      if (n < 10 || !d) return null;
+      const slope = (n * sxy - sx * sy) / d;
+      const base = (sx - slope * sy) / n;
+      return { slope, at: (y: number) => base + slope * y };
+    };
+    // A wide window finds the rule; figures set flush against it fall in
+    // that window too and flatten the fit. A second fit, on a window just
+    // wider than the stroke and following the first line, sees the rule
+    // alone.
+    const cx = raster.pixelX(e.x);
+    const first = fit(() => cx, Math.max(2, Math.round(3 * scale)));
+    if (!first) continue;
+    const narrow = Math.max(1, Math.round((e.width * scale) / 2) + 1);
+    const line = fit(first.at, narrow) ?? first;
+    leans.push((Math.atan(line.slope) * 180) / Math.PI);
   }
   if (leans.length < 2) return 0;
   leans.sort((a, b) => a - b);

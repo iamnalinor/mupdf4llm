@@ -43,8 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   columns leaning, as a sheet fed askew through a scanner or a printer
   comes out. Deskewing by the rows left the column rules leaning, and cell
   crops took pieces of them (read as "|" or "[") or cut off the digit next
-  to a rule. The lean is measured on the column rules and corrected only
-  when they all lean alike.
+  to a rule. The lean is measured on the column rules alone, not the text
+  set against them, and corrected only when they all lean alike.
 - `"pixels"` finds column rules that a scan has faded to light grey, too
   light to count as ink (they came out as dots, and two columns were
   merged). They are read on a lighter threshold, and count only inside a

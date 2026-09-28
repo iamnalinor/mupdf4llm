@@ -200,6 +200,30 @@ describe("detectRulings", () => {
     expect(columnLean(rules([5, 5, 5]))).toBe(0);
   });
 
+  test("columnLean: figures set flush against the rules do not flatten the lean", () => {
+    const lean = (figures: boolean) => {
+      const { data, fill } = raster();
+      const t = Math.tan((0.5 * Math.PI) / 180);
+      for (let k = 0; k < 3; k++) {
+        const at = (y: number) => Math.round(100 + k * 150 + (y - 200) * t);
+        for (let y = 20; y < 380; y++) fill(at(y), y, at(y) + 2, y + 1);
+        // A figure 6px wide and 8px tall in each 12px row, ending 2px
+        // (1.5pt) left of the rule, as right-aligned numbers are set.
+        if (figures)
+          for (let y = 22; y < 370; y += 12) fill(at(y + 4) - 8, y, at(y + 4) - 2, y + 8);
+      }
+      return columnLean(new PageRaster(data, W, H, 1.5));
+    };
+    expect(lean(true)).toBeCloseTo(lean(false), 2);
+    expect(Math.abs(lean(true) - 0.5)).toBeLessThan(0.05);
+  });
+
+  test("columnLean measures a sheared scan's true lean", async () => {
+    const doc = mupdf.Document.openDocument(fixture("sheared-scan-grid.pdf"), "application/pdf");
+    const upright = PageRaster.render(doc.loadPage(0) as mupdf.Page, 300).deskewed();
+    expect(Math.abs(Math.abs(columnLean(upright)) - 0.5)).toBeLessThan(0.03);
+  });
+
   test("a slightly skewed rule stays one edge", () => {
     const { data, fill } = raster();
     // 500px long, drops 6px: one pixel every ~83px.
