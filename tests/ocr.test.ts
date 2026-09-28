@@ -560,11 +560,17 @@ describe("OCR confidence", () => {
         ocr: { recognize: async () => result } as unknown as OcrEngine,
       });
     // A string, as engines returned before 0.4.
-    expect(run("text")).rejects.toThrow(OcrSetupError);
-    expect(run("text")).rejects.toThrow("{ text, confidence? }");
+    await expect(run("text")).rejects.toThrow(OcrSetupError);
+    await expect(run("text")).rejects.toThrow("{ text, confidence? }");
     // A confidence out of 0..1 (a percentage).
-    expect(run({ text: "a", confidence: 87 })).rejects.toThrow(OcrSetupError);
-    expect(run({ text: "a", confidence: NaN })).rejects.toThrow(OcrSetupError);
+    await expect(run({ text: "a", confidence: 87 })).rejects.toThrow(OcrSetupError);
+    await expect(run({ text: "a", confidence: NaN })).rejects.toThrow(OcrSetupError);
+    // Also where the default keeps the text layer when OCR cannot be set up.
+    await expect(
+      toMarkdown(fixture("broken-text-grid.pdf"), {
+        ocr: { recognize: async () => "text" } as unknown as OcrEngine,
+      }),
+    ).rejects.toThrow("{ text, confidence? }");
   });
 
   test("no confidence from the engine, none on the cell; none on text-layer cells", async () => {

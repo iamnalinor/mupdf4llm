@@ -174,7 +174,7 @@ export async function ocrTableCells(
       blocks,
     );
   } catch (e) {
-    if (!(keepLayer && e instanceof OcrSetupError)) throw e;
+    if (!(keepLayer && e instanceof OcrSetupError) || e instanceof OcrContractError) throw e;
     if (typeof process !== "undefined" && process.env?.DEBUG_MUPDF4LLM)
       console.warn("[mupdf4llm] OCR unavailable, keeping the text layer:", e.message);
   }
@@ -253,6 +253,13 @@ async function ocrCells(
 }
 
 /**
+ * An engine that breaks the {@link OcrResult} contract: a mistake in the
+ * code that passed it, so unlike a missing OCR package it stops the
+ * conversion even where the text layer would otherwise be kept.
+ */
+class OcrContractError extends OcrSetupError {}
+
+/**
  * An engine's result, checked against the {@link OcrResult} contract. A
  * broken one is an engine that cannot work (a string, as engines returned
  * before 0.4; a percentage for a confidence), not a bad cell: it stops the
@@ -260,10 +267,10 @@ async function ocrCells(
  */
 function checked(res: OcrResult): OcrResult {
   if (typeof res?.text !== "string")
-    throw new OcrSetupError("OcrEngine.recognize must return { text, confidence? } (since 0.4)");
+    throw new OcrContractError("OcrEngine.recognize must return { text, confidence? } (since 0.4)");
   const { confidence: c } = res;
   if (c !== undefined && !(typeof c === "number" && c >= 0 && c <= 1))
-    throw new OcrSetupError(`OCR confidence must be a number from 0 to 1, got ${String(c)}`);
+    throw new OcrContractError(`OCR confidence must be a number from 0 to 1, got ${String(c)}`);
   return res;
 }
 
