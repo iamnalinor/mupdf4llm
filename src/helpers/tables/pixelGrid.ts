@@ -164,13 +164,13 @@ export function findPixelGrids(raster: PageRaster): RuledGrid[] {
   const mx = page.width * EDGE_MARGIN;
   const my = page.height * EDGE_MARGIN;
   const edges = detectRulings(raster);
-  const vs = joinCollinear(
-    edges.flatMap((e) =>
-      e.kind === "v" && e.x > page.x0 + mx && e.x < page.x1 - mx
-        ? [{ pos: e.x, a: e.y0, b: e.y1 }]
-        : [],
-    ),
-  ).filter((v) => v.b - v.a >= MIN_RULE);
+  // The column rule pieces as found, before short gaps are bridged.
+  const pieces = edges.flatMap((e) =>
+    e.kind === "v" && e.x > page.x0 + mx && e.x < page.x1 - mx
+      ? [{ pos: e.x, a: e.y0, b: e.y1 }]
+      : [],
+  );
+  const vs = joinCollinear(pieces).filter((v) => v.b - v.a >= MIN_RULE);
   const hs = rowLines(
     joinCollinear(
       edges.flatMap((e) =>
@@ -183,7 +183,7 @@ export function findPixelGrids(raster: PageRaster): RuledGrid[] {
 
   const grids: RuledGrid[] = [];
   for (const group of groupColumns(vs)) {
-    const grid = gridFor(raster, group, hs);
+    const grid = gridFor(raster, group, hs, pieces);
     if (grid) grids.push(grid);
   }
   return grids;
@@ -284,7 +284,7 @@ function groupColumns(vs: Seg[]): Seg[][] {
   return [...groups.values()].filter((g) => positions(g, MIN_COL).length >= 2);
 }
 
-function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | null {
+function gridFor(raster: PageRaster, group: Seg[], hs: HLine[], pieces: Seg[]): RuledGrid | null {
   const cols = positions(group, MIN_COL);
   const cx0 = cols[0]!;
   const cx1 = cols[cols.length - 1]!;
@@ -397,14 +397,19 @@ function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | nul
     .filter((v) => v.x !== x0 && v.x !== x1);
   // Pieces of a column rule are joined across short gaps (a crossing rule, a
   // dropout), and so across a row barely taller than its text, where the
-  // rule stops for a label spanning the columns. Keep a rule only in the
-  // rows where it has ink and no word is drawn across it. A rule dropped by
-  // mistake costs nothing: cells merge only where text crosses their border.
-  const crossed = (x: number, ra: number, rb: number) =>
-    words.some((w) => {
-      const cy = (w[1] + w[3]) / 2;
-      return cy >= ra && cy < rb && w[0] < x - 1 && w[2] > x + 1;
-    });
+  // rules stop for a label spanning the columns. Undo that bridge: in a row
+  // ruled above and below, a column rule is taken out where the pieces
+  // actually found cover less than a third of the row. Rows without rules
+  // of their own are left alone, as are rules found in the row, however
+  // faint: the cells of a data row must not merge.
+  const ruledYs = [y0, y1, ...hard, ...positions(headerSegs)];
+  const ruledAt = (y: number) => ruledYs.some((r) => Math.abs(r - y) <= DOUBLE);
+  const found = (x: number, a: number, b: number) => {
+    let n = 0;
+    for (const p of pieces)
+      if (Math.abs(p.pos - x) <= ALIGN) n += Math.max(0, Math.min(p.b, b) - Math.max(p.a, a));
+    return n / Math.max(1e-6, b - a);
+  };
   const kept: typeof inner = [];
   for (const v of inner) {
     let piece: (typeof inner)[number] | null = null;
@@ -413,9 +418,10 @@ function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | nul
       if (rb <= v.y0 || ra >= v.y1) continue;
       const a = Math.max(ra, v.y0);
       const b = Math.min(rb, v.y1);
-      if (!crossed(v.x, a, b) && ruleInk(raster, v.x, a, b) >= 0.5) {
-        if (piece && piece.y1 >= ra) piece.y1 = Math.min(rb, v.y1);
-        else kept.push((piece = { x: v.x, y0: Math.max(ra, v.y0), y1: Math.min(rb, v.y1) }));
+      const gone = ruledAt(ra) && ruledAt(rb) && found(v.x, a, b) < 1 / 3;
+      if (!gone) {
+        if (piece && piece.y1 >= a) piece.y1 = b;
+        else kept.push((piece = { x: v.x, y0: a, y1: b }));
       }
     }
   }
@@ -446,33 +452,6 @@ function gridFor(raster: PageRaster, group: Seg[], hs: HLine[]): RuledGrid | nul
     vLines: [{ x: x0, y0, y1 }, ...inner, { x: x1, y0, y1 }],
     words,
   };
-}
-
-/**
- * Share of the pixel rows between page y0 and y1 (off the rules that bound
- * them) with ink near page x: 1 along a rule, near 0 where there is none.
- * "Near" allows for a page fed askew by up to 3°.
- */
-function ruleInk(raster: PageRaster, x: number, y0: number, y1: number): number {
-  const { width: w } = raster;
-  const ink = raster.ink;
-  const pad = Math.ceil(raster.scale * 1.5);
-  const px = raster.pixelX(x);
-  const py0 = raster.pixelY(y0) + pad;
-  const py1 = raster.pixelY(y1) - pad;
-  if (py1 <= py0) return 1;
-  const reach = 2 + Math.ceil(0.06 * (py1 - py0));
-  let n = 0;
-  for (let py = py0; py <= py1; py++) {
-    for (let d = -reach; d <= reach; d++) {
-      const xx = px + d;
-      if (xx >= 0 && xx < w && ink[py * w + xx]) {
-        n++;
-        break;
-      }
-    }
-  }
-  return n / (py1 - py0 + 1);
 }
 
 /** Median grey of the paper (non-ink pixels) in a page-coordinate box; NaN without any. */

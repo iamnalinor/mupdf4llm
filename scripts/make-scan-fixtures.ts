@@ -15,6 +15,12 @@ const SCANS: Record<string, { id: string; page: number; note: string }> = {
     page: 181,
     note: "an upright table with ruled columns",
   },
+  // Statistical Abstract for the United Kingdom 1893-1907, HMSO, London, 1908.
+  "scan-gb-abstract-1908-table.pdf": {
+    id: "annual-abstract-of-statistics-gb_1893-1907_55",
+    page: 150,
+    note: "column rules faint in places, body rows not ruled",
+  },
   // Statistical abstract of foreign countries, Govt. Printing Office, Washington, 1909.
   "scan-us-abstract-1909-sideways.pdf": {
     id: "cu31924030388791",

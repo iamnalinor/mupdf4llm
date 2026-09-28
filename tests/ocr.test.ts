@@ -560,6 +560,20 @@ describe("pixels: a label row across all columns", () => {
     expect(page!.text).toContain(`|${label}|`);
   });
 
+  test("body rows without rules of their own stay split on a real scan", async () => {
+    // Column rules are faint in places; no data row may merge across them.
+    const [page] = await toMarkdownPages(fixture("scan-gb-abstract-1908-table.pdf"), {
+      tableStrategy: "pixels",
+      ocr: fakeEngine(),
+    });
+    const t = page!.tables[0]!;
+    // Only the label of the second part of the table (row 26) spans columns.
+    const merged = t.cells
+      .map((r, i) => (i > 2 && r.filter((c) => c === null).length > 1 ? i : -1))
+      .filter((i) => i >= 0);
+    expect(merged).toEqual([26]);
+  }, 60_000);
+
   test("on a scan it is one merged cell", async () => {
     const [page] = await toMarkdownPages(degrade(fixture("merged-row-grid.pdf"), {}), {
       tableStrategy: "pixels",
