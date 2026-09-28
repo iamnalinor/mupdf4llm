@@ -119,6 +119,20 @@ describe("detectRulings", () => {
     expect(v.map((e) => Math.round(e.x)).sort((a, b) => a - b)).toEqual([34, 366]);
   });
 
+  test("a column rule with text pressed against both sides is kept", () => {
+    const { data, fill } = raster();
+    fill(299, 50, 301, 350); // v rule, 2px
+    // A dense small table: lines of "glyphs" 8px tall, 4px apart, ending a
+    // pixel left of the rule (right-aligned numbers) and starting a pixel
+    // right of it (the next column's text).
+    for (let y = 52; y < 346; y += 12) {
+      fill(280, y, 298, y + 8);
+      fill(302, y, 330, y + 8);
+    }
+    const v = detectRulings(new PageRaster(data, W, H, 1.5)).filter((e) => e.kind === "v");
+    expect(v.map((e) => Math.round(e.x))).toEqual([200]);
+  });
+
   test("a slightly skewed rule stays one edge", () => {
     const { data, fill } = raster();
     // 500px long, drops 6px: one pixel every ~83px.

@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Under `"auto"`, a cell whose text-layer text is not trusted but that
   shows no ink on the page (invisible or white text) comes out empty
   instead of keeping that text.
+- `"pixels"` keeps a column rule with text pressed against both sides of
+  it (a small table with numbers set flush against the rule and the next
+  column's text right after it); two columns used to be merged.
 
 ## [0.3.1] - 2026-09-28
 

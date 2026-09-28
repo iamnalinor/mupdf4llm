@@ -28,21 +28,24 @@ export function detectRulings(raster: PageRaster): DrawingEdge[] {
 
   const inkH = (row: number, i: number) => row >= 0 && row < h && ink[row * w + i] === 1;
   const inkV = (col: number, i: number) => col >= 0 && col < w && ink[i * w + col] === 1;
-  // A rule has blank paper on at least one side. A run through a line of
-  // dense text (small caps, a low-resolution scan) has ink on both.
-  const clear =
-    (isInk: typeof inkH) => (r: { a: number; b: number; pos: number; thick: number }) => {
-      const off = Math.round(r.thick / 2 + scale * 1.5);
-      const side = (line: number) => {
-        let n = 0;
-        for (let i = r.a; i <= r.b; i++) if (isInk(line, i)) n++;
-        return n / (r.b - r.a + 1);
-      };
-      const p = Math.round(r.pos);
-      return side(p - off) < 0.4 || side(p + off) < 0.4;
+  // A row rule has blank paper on at least one side. A run through a line
+  // of dense text (small caps, a low-resolution scan) has ink on both. A
+  // column rule needs no such check: the gaps between text lines break a
+  // vertical run long before its minimum length, while a small table can
+  // set its numbers flush against a column rule on one side and the next
+  // column's text on the other.
+  const clear = (r: { a: number; b: number; pos: number; thick: number }) => {
+    const off = Math.round(r.thick / 2 + scale * 1.5);
+    const side = (line: number) => {
+      let n = 0;
+      for (let i = r.a; i <= r.b; i++) if (inkH(line, i)) n++;
+      return n / (r.b - r.a + 1);
     };
-  const horiz = scan(h, w, inkH, gap, minLen, maxThick).filter(clear(inkH));
-  const vert = scan(w, h, inkV, gap, minLen, maxThick).filter(clear(inkV));
+    const p = Math.round(r.pos);
+    return side(p - off) < 0.4 || side(p + off) < 0.4;
+  };
+  const horiz = scan(h, w, inkH, gap, minLen, maxThick).filter(clear);
+  const vert = scan(w, h, inkV, gap, minLen, maxThick);
 
   const edges: DrawingEdge[] = [];
   for (const r of horiz) {
