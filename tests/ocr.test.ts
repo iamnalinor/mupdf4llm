@@ -196,6 +196,8 @@ describe("detectRulings", () => {
     expect(columnLean(rules([0.6, 0.6, 0.6]))).toBeCloseTo(0.6, 1);
     expect(columnLean(rules([0.5, 0, -0.5]))).toBe(0);
     expect(columnLean(rules([0, 0, 0]))).toBeCloseTo(0, 2);
+    // Past the ±3° a scan can be askew, a lean is no shear to set right.
+    expect(columnLean(rules([5, 5, 5]))).toBe(0);
   });
 
   test("a slightly skewed rule stays one edge", () => {
@@ -551,6 +553,20 @@ describe("OCR confidence", () => {
     expect(multi.every((c) => c!.confidence === 0.3)).toBe(true);
   });
 
+  test("an engine that breaks the result contract stops the conversion, saying why", async () => {
+    const run = (result: unknown) =>
+      toMarkdown(fixture("scanned-grid.pdf"), {
+        tableStrategy: "pixels",
+        ocr: { recognize: async () => result } as unknown as OcrEngine,
+      });
+    // A string, as engines returned before 0.4.
+    expect(run("text")).rejects.toThrow(OcrSetupError);
+    expect(run("text")).rejects.toThrow("{ text, confidence? }");
+    // A confidence out of 0..1 (a percentage).
+    expect(run({ text: "a", confidence: 87 })).rejects.toThrow(OcrSetupError);
+    expect(run({ text: "a", confidence: NaN })).rejects.toThrow(OcrSetupError);
+  });
+
   test("no confidence from the engine, none on the cell; none on text-layer cells", async () => {
     const [page] = await toMarkdownPages(fixture("broken-text-grid.pdf"), {
       textSource: "auto",
@@ -591,6 +607,11 @@ describe("auto with a font whose codes are broken", () => {
     // One unmapped footnote mark, used a lot, does not condemn its font.
     const marks = "\uE000Region North".repeat(4) + "Count Share Total".repeat(20);
     expect(brokenFonts([textBlock("Helvetica", marks)])).toEqual(new Set());
+    // Nor do a few ligatures mapped to the Private Use Area (fi, fl, ff, ffi).
+    const ligatures =
+      "The \uF001rst \uF002oor, the o\uF003ce, the su\uF004x. " +
+      "Plain words of body text around them. ".repeat(20);
+    expect(brokenFonts([textBlock("Minion", ligatures)])).toEqual(new Set());
   });
 
   test("a long table in such a font is OCRed as a whole", async () => {
@@ -675,8 +696,9 @@ const hasRapidOcr = (() => {
 // ---------------------------------------------------------------------------
 
 /** [rows, columns] of each table found with `tableStrategy: "pixels"`. */
-async function scanShapes(name: string): Promise<number[][]> {
-  const pages = await toMarkdownPages(fixture(name), {
+async function scanShapes(name: string, how?: Degradation): Promise<number[][]> {
+  const buf = how ? degrade(fixture(name), how) : fixture(name);
+  const pages = await toMarkdownPages(buf, {
     tableStrategy: "pixels",
     ocr: fakeEngine(),
   });
@@ -919,6 +941,18 @@ describe("pixels strategy on real scans", () => {
       [14, 7],
     ]);
   });
+
+  test("short dark runs by a column's digits are not column rules", async () => {
+    // A torn edge or a blot beside a column of figures makes a vertical run
+    // just over the minimum length, with ink on both sides.
+    expect(await scanShapes("scan-in-abstract-1901-table.pdf")).toEqual([[28, 10]]);
+    const rough = { deg: -2, sigma: 12, speck: 0.002 };
+    expect(await scanShapes("scan-gb-abstract-1908-table.pdf", rough)).toEqual([[52, 9]]);
+    expect(await scanShapes("scan-us-census-1900.pdf", rough)).toEqual([
+      [18, 10],
+      [15, 7],
+    ]);
+  }, 60_000);
 
   test("Russian census 1918: dense rows, values on the last line of an entry", async () => {
     // Header, entries 7-24, total.

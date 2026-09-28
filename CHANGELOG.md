@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** `OcrEngine.recognize` returns `{ text, confidence? }`
   (the new `OcrResult` type) instead of a string. A custom engine changes
   `return text` to `return { text }`, adding `confidence` (0 to 1) when it
-  knows one.
+  knows one. An engine that still returns a string, or a confidence
+  outside 0 to 1, stops the conversion with an `OcrSetupError`.
 
 ### Added
 
@@ -27,16 +28,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `"auto"` also treats a font as broken when it has at least 4 different
-  broken codes, whatever their share of its text. On a long table the
+  control characters, whatever their share of its text. On a long table the
   glyphs that come out as control characters were under 5% of the text,
   and the printable gibberish of the rest was kept. Tab, line feed and the
   other C0 controls now count as broken characters of a font.
 - Under `"auto"`, a cell whose text-layer text is not trusted but that
   shows no ink on the page (invisible or white text) comes out empty
   instead of keeping that text.
-- `"pixels"` keeps a column rule with text pressed against both sides of
-  it (a small table with numbers set flush against the rule and the next
-  column's text right after it); two columns used to be merged.
+- `"pixels"` keeps a long column rule (72 pt or more) with text pressed
+  against both sides of it (a small table with numbers set flush against
+  the rule and the next column's text right after it); two columns used
+  to be merged.
 - `"pixels"` sets upright the columns of a sheared scan: rows level but
   columns leaning, as a sheet fed askew through a scanner or a printer
   comes out. Deskewing by the rows left the column rules leaning, and cell

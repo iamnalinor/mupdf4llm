@@ -159,7 +159,8 @@ The image is one table cell: 8-bit grayscale (`img.data`, `img.width`,
 `img.height`) with a white margin, also available as PNG (`img.png()`).
 Return `{ text, confidence? }`: the text with lines separated by `\n`,
 and, if the engine knows it, how sure it is from 0 to 1 (leave it out
-otherwise). Throw `OcrSetupError`
+otherwise). Any other result (a bare string, a confidence outside 0–1)
+stops the conversion with an `OcrSetupError`. Throw `OcrSetupError`
 (exported by the package) when the engine cannot work at all — a missing
 model, rejected credentials: it aborts the conversion. Any other error
 only marks that cell as `"failed"`. A multi-line cell whose

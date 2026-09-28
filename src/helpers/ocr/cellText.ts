@@ -67,7 +67,7 @@ export function looksBroken(text: string): boolean {
 const BROKEN_FONT_MIN = 3;
 /** ...making up at least this share of its text... */
 const BROKEN_FONT_SHARE = 0.05;
-/** ...or with at least this many different broken codes, whatever their share. */
+/** ...or with at least this many different control characters, whatever their share. */
 const BROKEN_FONT_CODES = 4;
 /**
  * A glyph's code: tab, line feed and the other C0 controls. A real space
@@ -82,9 +82,10 @@ const CONTROL_CHAR = /[\u0000-\u001F]/u;
  * for its first glyphs and printable ASCII gibberish for the rest, which on
  * its own passes for text. Such a font is told by a fair share of broken
  * characters (see {@link looksBroken}), or, on a long table where its first
- * glyphs are a small part of the text, by many different ones. A healthy
- * font with a symbol or two that do not map (a footnote mark, a bullet) is
- * not broken: only those cells are.
+ * glyphs are a small part of the text, by many different control
+ * characters. A healthy font with a few glyphs that do not map (a footnote
+ * mark, a bullet, ligatures in the Private Use Area) is not broken: only
+ * those cells are.
  */
 export function brokenFonts(blocks: Block[]): Set<string> {
   const bad = new Map<string, number>();
@@ -101,6 +102,7 @@ export function brokenFonts(blocks: Block[]): Set<string> {
           all.set(f, (all.get(f) ?? 0) + 1);
           if (!broken) continue;
           bad.set(f, (bad.get(f) ?? 0) + 1);
+          if (!CONTROL_CHAR.test(ch.c)) continue;
           if (!codes.has(f)) codes.set(f, new Set());
           codes.get(f)!.add(ch.c);
         }
@@ -112,7 +114,7 @@ export function brokenFonts(blocks: Block[]): Set<string> {
       .filter(
         ([f, n]) =>
           (n >= BROKEN_FONT_MIN && n >= BROKEN_FONT_SHARE * all.get(f)!) ||
-          codes.get(f)!.size >= BROKEN_FONT_CODES,
+          (codes.get(f)?.size ?? 0) >= BROKEN_FONT_CODES,
       )
       .map(([f]) => f),
   );
@@ -210,7 +212,7 @@ async function ocrCells(
         }
         const read = async (img: OcrImage): Promise<OcrResult> => {
           try {
-            const res = await engine.recognize(img);
+            const res = checked(await engine.recognize(img));
             return { ...res, text: res.text.trim() };
           } catch (e) {
             // A missing OCR package is a configuration error, not a bad cell.
@@ -248,6 +250,21 @@ async function ocrCells(
       }
     }
   }
+}
+
+/**
+ * An engine's result, checked against the {@link OcrResult} contract. A
+ * broken one is an engine that cannot work (a string, as engines returned
+ * before 0.4; a percentage for a confidence), not a bad cell: it stops the
+ * conversion instead of leaving every cell failed.
+ */
+function checked(res: OcrResult): OcrResult {
+  if (typeof res?.text !== "string")
+    throw new OcrSetupError("OcrEngine.recognize must return { text, confidence? } (since 0.4)");
+  const { confidence: c } = res;
+  if (c !== undefined && !(typeof c === "number" && c >= 0 && c <= 1))
+    throw new OcrSetupError(`OCR confidence must be a number from 0 to 1, got ${String(c)}`);
+  return res;
 }
 
 /** Lines read one by one, as one result: the least sure line sets the confidence. */
