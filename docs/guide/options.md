@@ -31,13 +31,14 @@ entry point.
 
 ## Tables
 
-| Key                  | Type                                                                    | Default          | Notes                                                            |
-| -------------------- | ----------------------------------------------------------------------- | ---------------- | ---------------------------------------------------------------- |
-| `tableStrategy`      | `"lines_strict" \| "lines" \| "text" \| "explicit" \| "pixels" \| null` | `"lines_strict"` | See [Tables](/guide/tables). `null` disables detection.          |
-| `explicitTableGrids` | `{ hLines: number[]; vLines: number[] }[]`                              | `[]`             | For `"explicit"` only.                                           |
-| `textSource`         | `"pdf" \| "ocr" \| "auto"`                                              | see notes        | `"auto"`. See [OCR](/guide/ocr).                                 |
-| `ocr`                | `OcrEngine`                                                             | RapidOCR         | Needs `ppu-paddle-ocr` + `onnxruntime-node` unless you pass one. |
-| `ocrDpi`             | `number`                                                                | `300`            | Render resolution for `"pixels"` and OCR.                        |
+| Key                  | Type                                                                    | Default          | Notes                                                                                                          |
+| -------------------- | ----------------------------------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| `tableStrategy`      | `"lines_strict" \| "lines" \| "text" \| "explicit" \| "pixels" \| null` | `"lines_strict"` | See [Tables](/guide/tables). `null` disables detection.                                                        |
+| `explicitTableGrids` | `{ hLines: number[]; vLines: number[] }[]`                              | `[]`             | For `"explicit"` only.                                                                                         |
+| `textSource`         | `"pdf" \| "ocr" \| "auto"`                                              | see notes        | `"auto"`. See [OCR](/guide/ocr).                                                                               |
+| `ocr`                | `OcrEngine`                                                             | RapidOCR         | Needs `ppu-paddle-ocr` + `onnxruntime-node` unless you pass one.                                               |
+| `ocrDpi`             | `number`                                                                | `300`            | Render resolution for `"pixels"` and OCR.                                                                      |
+| `detectOrientation`  | `boolean`                                                               | `true`           | With `"pixels"`, turn a page without a text layer scanned sideways. See [Page rotation](/guide/page-rotation). |
 
 ## Images
 
