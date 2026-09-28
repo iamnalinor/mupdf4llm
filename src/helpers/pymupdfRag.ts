@@ -8,7 +8,7 @@ import { IdentifyHeaders, type HeaderIdProvider } from "./text/identifyHeaders";
 import { columnBoxes } from "./layout/multiColumn";
 import { extractDrawings } from "./tables/drawingDevice";
 import { findTables, tablesFromGrids, type TableStrategy } from "./tables/tableFinder";
-import { findPixelGrids } from "./tables/pixelGrid";
+import { columnLean, findPixelGrids } from "./tables/pixelGrid";
 import { PageRaster } from "./ocr/engine";
 import { createRapidOcr, lazyEngine } from "./ocr/rapidOcr";
 import { ocrTableCells } from "./ocr/cellText";
@@ -482,8 +482,12 @@ async function convert(
             // text layer stays in the page's own (skewed) coordinates.
             if (pixels) {
               raster = PageRaster.render(page, ocrDpi);
-              if (textSource === "ocr" || (textSource === "auto" && !hasTextLayer(td.blocks)))
+              if (textSource === "ocr" || (textSource === "auto" && !hasTextLayer(td.blocks))) {
                 raster = raster.deskewed();
+                // Level rows do not make upright columns on a sheared sheet.
+                const lean = columnLean(raster);
+                if (Math.abs(lean) >= 0.1) raster = raster.unleaned(lean);
+              }
             }
             tabs = raster
               ? tablesFromGrids(td.blocks, findPixelGrids(raster))

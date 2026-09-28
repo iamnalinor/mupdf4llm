@@ -69,6 +69,62 @@ export function detectRulings(raster: PageRaster): DrawingEdge[] {
   return edges;
 }
 
+/** Column rules shorter than this (pt) are too short to measure a lean on. */
+const LEAN_RULE = 72;
+/** Column rules leaning further than this (degrees) from their median do not share one lean. */
+const LEAN_SPREAD = 0.15;
+
+/**
+ * How far the column rules lean from upright, in degrees (x growing with y
+ * is positive), when they all lean alike; else 0. A sheet sheared rather
+ * than turned (fed askew through a scanner or a printer) has level rows
+ * but leaning columns, and deskewing it by its rows leaves the columns
+ * leaning. Each rule's lean is fitted to the middle of its ink along its
+ * length. Rules that lean differently (a curled page) give 0.
+ */
+export function columnLean(raster: PageRaster): number {
+  const { width: w, scale } = raster;
+  const ink = raster.ink;
+  const half = Math.max(2, Math.round(3 * scale));
+  const maxThick = Math.max(2, scale * 4);
+  const step = Math.max(1, Math.round(2 * scale));
+  const leans: number[] = [];
+  for (const e of detectRulings(raster)) {
+    if (e.kind !== "v" || e.y1 - e.y0 < LEAN_RULE) continue;
+    const cx = raster.pixelX(e.x);
+    // Least-squares fit of x against y over the rule's ink.
+    let n = 0;
+    let sy = 0;
+    let sx = 0;
+    let syy = 0;
+    let sxy = 0;
+    for (let y = raster.pixelY(e.y0); y <= raster.pixelY(e.y1); y += step) {
+      let m = 0;
+      let mx = 0;
+      for (let x = Math.max(0, cx - half); x <= Math.min(w - 1, cx + half); x++)
+        if (ink[y * w + x]) {
+          m++;
+          mx += x;
+        }
+      // Skip rows where a row rule or text crosses it.
+      if (!m || m > maxThick) continue;
+      const x = mx / m;
+      n++;
+      sy += y;
+      sx += x;
+      syy += y * y;
+      sxy += x * y;
+    }
+    const d = n * syy - sy * sy;
+    if (n < 10 || !d) continue;
+    leans.push((Math.atan((n * sxy - sx * sy) / d) * 180) / Math.PI);
+  }
+  if (leans.length < 2) return 0;
+  leans.sort((a, b) => a - b);
+  const median = leans[leans.length >> 1]!;
+  return leans.every((l) => Math.abs(l - median) <= LEAN_SPREAD) ? median : 0;
+}
+
 function scan(
   nLines: number,
   lineLen: number,

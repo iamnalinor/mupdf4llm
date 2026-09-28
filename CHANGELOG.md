@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `"pixels"` keeps a column rule with text pressed against both sides of
   it (a small table with numbers set flush against the rule and the next
   column's text right after it); two columns used to be merged.
+- `"pixels"` sets upright the columns of a sheared scan: rows level but
+  columns leaning, as a sheet fed askew through a scanner or a printer
+  comes out. Deskewing by the rows left the column rules leaning, and cell
+  crops took pieces of them (read as "|" or "[") or cut off the digit next
+  to a rule. The lean is measured on the column rules and corrected only
+  when they all lean alike.
 
 ## [0.3.1] - 2026-09-28
 

@@ -8,7 +8,7 @@ import { disposable } from "../src/helpers/ocr/rapidOcr";
 import { brokenFonts, fixHomoglyphs, looksBroken } from "../src/helpers/ocr/cellText";
 import type { Block, Span } from "../src/helpers/types";
 import type { BBox } from "../src/helpers/geometry";
-import { detectRulings, rowBreaks } from "../src/helpers/tables/pixelGrid";
+import { columnLean, detectRulings, rowBreaks } from "../src/helpers/tables/pixelGrid";
 import { inkAxis, textPlausibility, upsideDown } from "../src/helpers/layout/scanOrientation";
 import { degrade, type Degradation } from "./helpers/degrade";
 
@@ -131,6 +131,23 @@ describe("detectRulings", () => {
     }
     const v = detectRulings(new PageRaster(data, W, H, 1.5)).filter((e) => e.kind === "v");
     expect(v.map((e) => Math.round(e.x))).toEqual([200]);
+  });
+
+  test("columnLean: the lean column rules share, none when they fan out", () => {
+    const rules = (leans: number[]) => {
+      const { data, fill } = raster();
+      leans.forEach((deg, k) => {
+        const t = Math.tan((deg * Math.PI) / 180);
+        for (let y = 20; y < 380; y++) {
+          const x = Math.round(100 + k * 150 + (y - 200) * t);
+          fill(x, y, x + 2, y + 1);
+        }
+      });
+      return new PageRaster(data, W, H, 1.5);
+    };
+    expect(columnLean(rules([0.6, 0.6, 0.6]))).toBeCloseTo(0.6, 1);
+    expect(columnLean(rules([0.5, 0, -0.5]))).toBe(0);
+    expect(columnLean(rules([0, 0, 0]))).toBeCloseTo(0, 2);
   });
 
   test("a slightly skewed rule stays one edge", () => {
@@ -265,6 +282,26 @@ describe("pixels strategy on a scan", () => {
     // Bbox in page coordinates (grid spans x 60..520).
     expect(Math.abs(t.bbox[0] - 60)).toBeLessThan(1.5);
     expect(Math.abs(t.bbox[2] - 520)).toBeLessThan(1.5);
+  });
+
+  test("leaning columns on level rows are set upright: no crop takes a piece of a rule", async () => {
+    const ocr = fakeEngine();
+    const [page] = await toMarkdownPages(fixture("sheared-scan-grid.pdf"), {
+      tableStrategy: "pixels",
+      ocr,
+    });
+    const t = page!.tables[0]!;
+    expect([t.rows, t.columns]).toEqual([40, 4]);
+    // A rule piece is a pixel column of the crop that is dark most of the way down.
+    const rulePiece = (img: OcrImage) => {
+      for (let x = 0; x < img.width; x++) {
+        let dark = 0;
+        for (let y = 0; y < img.height; y++) if (img.data[y * img.width + x]! < 128) dark++;
+        if (dark > 0.6 * img.height) return true;
+      }
+      return false;
+    };
+    expect(ocr.calls.filter(rulePiece).length).toBe(0);
   });
 
   test("auto deskews a page without a text layer, as ocr does", async () => {

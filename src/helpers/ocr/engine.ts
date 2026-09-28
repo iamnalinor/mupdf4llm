@@ -182,6 +182,31 @@ export class PageRaster {
     return new PageRaster(out, w, h, this.scale, this.ox, this.oy);
   }
 
+  /**
+   * The page with columns that lean by `deg` (x growing with y is positive)
+   * set upright, rows left as they are: each pixel row is shifted
+   * sideways, with linear sampling. Pixel coordinates of the result are
+   * those of the upright columns, so grid and crops must both come from it.
+   */
+  unleaned(deg: number): PageRaster {
+    const { width: w, height: h, data } = this;
+    const t = Math.tan((deg * Math.PI) / 180);
+    const out = new Uint8Array(w * h).fill(255);
+    const cy = h / 2;
+    for (let y = 0; y < h; y++) {
+      const shift = (y - cy) * t;
+      for (let x = 0; x < w; x++) {
+        const sx = x + shift;
+        const x0 = Math.floor(sx);
+        if (x0 < 0 || x0 + 1 >= w) continue;
+        const f = sx - x0;
+        const i = y * w + x0;
+        out[y * w + x] = Math.round(data[i]! * (1 - f) + data[i + 1]! * f);
+      }
+    }
+    return new PageRaster(out, w, h, this.scale, this.ox, this.oy);
+  }
+
   /** Skew of the page content in degrees (clockwise positive), within ±3°. */
   skew(): number {
     const { width: w, height: h } = this;

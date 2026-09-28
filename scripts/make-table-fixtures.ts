@@ -416,6 +416,59 @@ function scannedGrid() {
 }
 
 /**
+ * A scan whose rows run level but whose columns lean 0.5°: the sheet was
+ * sheared, not turned, as a flatbed or a printer feeding it askew leaves
+ * it. A tall table of numbers set flush right against the column rules,
+ * so a crop that follows an upright rule takes a piece of the leaning one
+ * or cuts off a digit.
+ */
+function shearedScanGrid() {
+  const cols = [60, 110, 200, 260, 320];
+  const top = 790;
+  const ROW = 18;
+  const size = 10;
+  let c = "0 G 1 w\n";
+  const n = 40;
+  for (let r = 0; r <= n; r++)
+    c += `${cols[0]} ${top - r * ROW} m ${cols.at(-1)} ${top - r * ROW} l S\n`;
+  for (const x of cols) c += `${x} ${top} m ${x} ${top - n * ROW} l S\n`;
+  for (let r = 0; r < n; r++) {
+    const vals = [
+      String(r + 1),
+      String((r * 13) % 97),
+      String((r * 7) % 100),
+      String((r * 31) % 89),
+    ];
+    vals.forEach((v, k) => {
+      // Helvetica digits are 0.556 em wide; set flush right, 1.5 pt off the rule.
+      const x = cols[k + 1]! - 1.5 - v.length * 0.556 * size;
+      c += text(x, top - r * ROW - 13, v, size);
+    });
+  }
+  const src = new mupdf.PDFDocument();
+  const font = src.addSimpleFont(new mupdf.Font("Helvetica"));
+  const res = src.addObject({ Font: { F1: font } });
+  src.insertPage(-1, src.addPage([0, 0, W, H], 0, res, c));
+  const DPI = 200;
+  const pix = src
+    .loadPage(0)
+    .toPixmap(mupdf.Matrix.scale(DPI / 72, DPI / 72), mupdf.ColorSpace.DeviceGray, false);
+
+  const doc = new mupdf.PDFDocument();
+  const img = doc.addImage(new mupdf.Image(pix));
+  const resources = doc.addObject({ XObject: { Im0: img } });
+  // x grows with the image's v (up the page): columns lean, rows stay level.
+  const lean = (H * Math.tan((0.5 * Math.PI) / 180)).toFixed(3);
+  const shift = (-Number(lean) / 2).toFixed(3);
+  doc.insertPage(
+    -1,
+    doc.addPage([0, 0, W, H], 0, resources, `q ${W} 0 ${lean} ${H} ${shift} 0 cm /Im0 Do Q\n`),
+  );
+  writeFileSync(`${OUT}/sheared-scan-grid.pdf`, doc.saveToBuffer("compress").asUint8Array());
+  console.log(`wrote ${OUT}/sheared-scan-grid.pdf`);
+}
+
+/**
  * Correct vector grid, broken text layer: the body rows use a font whose
  * ToUnicode map sends every printable code to the Private Use Area, as in
  * PDFs with a mangled font encoding. The header row is intact.
@@ -646,6 +699,7 @@ const all: Record<string, () => void> = {
   ruleVariants,
   splitLineRows,
   scannedGrid,
+  shearedScanGrid,
   brokenTextGrid,
   type3NoUnicodeGrid,
   type3NoUnicodeLongGrid,
