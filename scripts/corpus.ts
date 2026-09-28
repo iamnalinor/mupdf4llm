@@ -74,7 +74,8 @@ async function load(e: Entry): Promise<Uint8Array> {
   }
   const buf = new Uint8Array(readFileSync(file));
   const sha = createHash("sha256").update(buf).digest("hex");
-  if (e.sha256 && sha !== e.sha256) console.warn(`! ${e.name}: checksum differs from the manifest`);
+  // A changed file would silently change the baseline.
+  if (e.sha256 && sha !== e.sha256) throw new Error("checksum differs from the manifest");
   return e.kind === "image" ? imagePdf(buf) : e.pages ? onlyPages(buf, e.pages) : buf;
 }
 

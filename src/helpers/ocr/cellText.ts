@@ -139,13 +139,19 @@ export interface OcrCellsOptions {
 export async function ocrTableCells(
   tables: TableData[],
   source: TextSource,
-  raster: PageRaster,
+  raster: PageRaster | (() => PageRaster),
   engine: OcrEngine,
   { blocks = [], keepLayer = false }: OcrCellsOptions = {},
 ): Promise<void> {
   if (source === "pdf") return;
   try {
-    await ocrCells(tables, source, raster, engine, blocks);
+    await ocrCells(
+      tables,
+      source,
+      typeof raster === "function" ? raster : () => raster,
+      engine,
+      blocks,
+    );
   } catch (e) {
     if (!(keepLayer && e instanceof OcrSetupError)) throw e;
     if (typeof process !== "undefined" && process.env?.DEBUG_MUPDF4LLM)
@@ -156,7 +162,7 @@ export async function ocrTableCells(
 async function ocrCells(
   tables: TableData[],
   source: TextSource,
-  raster: PageRaster,
+  getRaster: () => PageRaster,
   engine: OcrEngine,
   blocks: Block[],
 ): Promise<void> {
@@ -174,7 +180,7 @@ async function ocrCells(
         const cell = tab.cells[r]?.[c];
         if (!cell) continue;
         if (texts && trusted(texts[r]![c]!.text, Rect.from(cell))) continue;
-        const whole = raster.crop(Rect.from(cell));
+        const whole = getRaster().crop(Rect.from(cell));
         if (!whole) {
           // Nothing to read. Under "auto" the (empty) text layer stands.
           if (source === "ocr") tab.setCellText(r, c, { text: "", source: "ocr" });
@@ -194,7 +200,7 @@ async function ocrCells(
         let text = await read(whole);
         // A detector can drop a short line from a multi-line cell; then
         // recognise the cell line by line.
-        const lines = raster.cropLines(Rect.from(cell));
+        const lines = getRaster().cropLines(Rect.from(cell));
         if (lines.length > 1 && text.split("\n").filter(Boolean).length < lines.length) {
           // One call at a time: engines may not handle parallel requests.
           const perLine: string[] = [];
@@ -275,9 +281,10 @@ export function fixHomoglyphs(text: string): string {
     const lat = chars.filter((ch) => LATIN.test(ch));
     if (!lat.length || !lat.every((ch) => ch in TWINS)) return word;
     const mixed = lat.length < chars.length;
-    // A word all of twins: Cyrillic only when Cyrillic words outnumber the
-    // other Latin ones.
-    if (!mixed && cyrillic <= latin - 1) return word;
+    // A word all of twins: Cyrillic only when it has small letters (capitals
+    // alone are an abbreviation, "HP", "ABC") and Cyrillic words outnumber
+    // the other Latin ones.
+    if (!mixed && (!/\p{Ll}/u.test(word) || cyrillic <= latin - 1)) return word;
     const endsSmall = /\p{Ll}/u.test(chars[chars.length - 1]!);
     return chars
       .map((ch, i) => {

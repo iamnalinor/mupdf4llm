@@ -42,7 +42,8 @@ Rules, borders and the dark surround of a photographed page are too
 large to vote, and skew does not matter. A page whose lines clearly run
 vertically is turned a quarter before its tables are read, the same way
 `removeRotation` bakes a `/Rotate`; when the votes are close, the page is
-left as it is.
+left as it is. Like `removeRotation`, the turn is made in the loaded
+document, also when `removeRotation` is off.
 Which quarter — clockwise or back — the ink cannot tell; when the cells
 are going to be OCR'd anyway (`textSource` other than `"pdf"`), a few of
 the longest lines are recognised both ways up and the page is turned so

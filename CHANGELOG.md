@@ -14,8 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `textSource` defaults to `"auto"` for every table strategy (it was
   `"ocr"` for `"pixels"` and `"pdf"` otherwise): the text layer is kept
   and only cells whose text is missing or broken are OCR'd; on a page
-  without a text layer that is every cell. Left at the default, a page
-  with a text layer keeps it when no OCR engine can be set up.
+  without a text layer that is every cell. Left at the default, the text
+  layer is kept when no OCR engine can be set up (only a scan without one,
+  read with `"pixels"`, still needs it). With `"pixels"`, a scan that
+  carries an OCR text layer of its own now keeps that text and is not
+  deskewed; pass `textSource: "ocr"` for the old behaviour.
 
 ### Added
 

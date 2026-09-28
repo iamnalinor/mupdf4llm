@@ -1,4 +1,4 @@
-import { test, expect, describe } from "bun:test";
+import { test, expect, describe, spyOn } from "bun:test";
 import { readFileSync } from "node:fs";
 import * as mupdf from "mupdf";
 import { toMarkdown, toMarkdownPages, createRapidOcr, OcrSetupError, Rect } from "../src/index";
@@ -186,6 +186,11 @@ test("fixHomoglyphs: Latin look-alikes in Cyrillic OCR text", () => {
     "Archiaров",
     "ЦСУ РСФСР",
     "Москва о Москве",
+    "Принтер HP",
+    "Модель ABC",
+    "Формат TEXT",
+    "Код PC",
+    "группа A",
   ])
     expect(fixHomoglyphs(t)).toBe(t);
 });
@@ -303,6 +308,35 @@ describe("textSource on a vector grid with a broken text layer", () => {
     const t = page!.tables[0]!;
     expect(t.cells[0]!.map((c) => c!.text)).toEqual(["No", "Region", "Count", "Share"]);
     expect(t.cells.flat().every((c) => c?.source === "pdf")).toBe(true);
+  });
+
+  test("the default never raises for a vector table without a text layer", async () => {
+    // A ruled grid whose "text" is drawn as filled shapes (outlined glyphs).
+    const doc = new mupdf.PDFDocument();
+    let c = "0 G 1 w\n";
+    for (let r = 0; r <= 3; r++) c += `60 ${760 - r * 24} m 360 ${760 - r * 24} l S\n`;
+    for (const x of [60, 160, 260, 360]) c += `${x} 760 m ${x} 688 l S\n`;
+    for (let r = 0; r < 3; r++)
+      for (const x of [66, 166, 266]) c += `${x} ${744 - r * 24} 40 8 re f\n`;
+    doc.insertPage(-1, doc.addPage([0, 0, 595, 842], 0, doc.addObject({}), c));
+    const buf = doc.saveToBuffer("compress").asUint8Array().slice();
+    const ocr: OcrEngine = {
+      async recognize() {
+        throw new OcrSetupError("no models");
+      },
+    };
+    const [page] = await toMarkdownPages(buf, { ocr });
+    expect(page!.tables.length).toBe(1);
+  });
+
+  test("a healthy table page is not rendered for OCR", async () => {
+    const render = spyOn(PageRaster, "render");
+    try {
+      await toMarkdown(fixture("merged-cells-grid.pdf"), { ocr: fakeEngine() });
+      expect(render).not.toHaveBeenCalled();
+    } finally {
+      render.mockRestore();
+    }
   });
 
   test('an explicit "auto" raises an OCR setup error', async () => {
@@ -638,6 +672,19 @@ describe("scans turned a quarter without /Rotate", () => {
       ocr,
     });
     expect(ocr.calls.length).toBe(0);
+  }, 60_000);
+
+  test("a scan shown sideways by its /Rotate is turned upright without removeRotation", async () => {
+    const doc = mupdf.PDFDocument.openDocument(
+      fixture("scan-ru-census-1918.pdf"),
+      "application/pdf",
+    ) as mupdf.PDFDocument;
+    (doc.loadPage(0) as mupdf.PDFPage).getObject().put("Rotate", 90);
+    const buf = doc.saveToBuffer("compress").asUint8Array().slice();
+    for (const removeRotation of [true, false]) {
+      const [t] = await shapes(buf, { removeRotation });
+      expect(t![1]).toBe(6);
+    }
   }, 60_000);
 
   test("upright scans are not turned", async () => {

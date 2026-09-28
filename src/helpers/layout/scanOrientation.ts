@@ -1,6 +1,6 @@
 import * as mupdf from "mupdf";
 import { PageRaster, grayImage, type OcrEngine, type OcrImage } from "../ocr/engine";
-import { removeRotation } from "./pageRotation";
+import { getPageRotation, removeRotation } from "./pageRotation";
 
 export type InkAxis = "upright" | "sideways" | "unknown";
 
@@ -124,9 +124,10 @@ export function scanTurn(page: mupdf.Page): 0 | 90 {
 }
 
 /**
- * Turn page `pno` clockwise by `deg` for good: set /Rotate and bake it into
- * the content with {@link removeRotation}, so text, drawings and the page box
- * all come out upright. Returns the reloaded page.
+ * Turn page `pno` clockwise by `deg` from how it is shown now, for good: add
+ * `deg` to its /Rotate and bake that into the content with
+ * {@link removeRotation}, so text, drawings and the page box come out as
+ * shown. Returns the reloaded page.
  */
 export function applyQuarterTurn(
   doc: mupdf.PDFDocument,
@@ -134,7 +135,7 @@ export function applyQuarterTurn(
   deg: 90 | 180 | 270,
 ): mupdf.PDFPage {
   const page = doc.loadPage(pno) as mupdf.PDFPage;
-  page.getObject().put("Rotate", deg);
+  page.getObject().put("Rotate", (getPageRotation(page) + deg) % 360);
   removeRotation(doc, page);
   return doc.loadPage(pno) as mupdf.PDFPage;
 }

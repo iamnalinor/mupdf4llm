@@ -524,11 +524,13 @@ async function convert(
       }
 
       if (tabs.length && textSource !== "pdf") {
-        raster ??= PageRaster.render(page, ocrDpi);
         // The default "auto" only repairs the text layer: without an OCR
-        // engine it keeps that layer. A page without one has nothing to keep.
-        const keepLayer = opts.textSource === undefined && hasTextLayer(td.blocks);
-        await ocrTableCells(tabs, textSource, raster, ocr, { blocks: td.blocks, keepLayer });
+        // engine it keeps that layer, as "pdf" (the old default) did. Only a
+        // scan read with "pixels" (whose old default was "ocr") needs OCR.
+        const keepLayer = opts.textSource === undefined && (!pixels || hasTextLayer(td.blocks));
+        // Rendered only when a cell turns out to need OCR.
+        const getRaster = () => (raster ??= PageRaster.render(page, ocrDpi));
+        await ocrTableCells(tabs, textSource, getRaster, ocr, { blocks: td.blocks, keepLayer });
       }
 
       const parms: PageParams = {

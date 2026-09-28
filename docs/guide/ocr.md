@@ -109,8 +109,8 @@ The CPU build of ONNX Runtime ships inside the package; if its
 postinstall script fails behind a proxy, `--ignore-scripts` is safe.
 Nothing is loaded unless a cell actually needs OCR. If the packages are
 missing, the call rejects with the install command above — except under
-the default `textSource` on a page that has a text layer, which is then
-kept as it is. Models (about
+the default `textSource`, where the text layer is kept as it is; only a
+scan without one read with `"pixels"` still needs the packages. Models (about
 13 MB) are downloaded and cached on first use.
 
 The default model is `v5-cyrillic-mobile` (Cyrillic and Latin script:

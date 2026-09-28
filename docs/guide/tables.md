@@ -62,8 +62,8 @@ await toMarkdown(buf, {
 ## `pixels`
 
 Finds the ruling lines on the **rendered page** rather than in the PDF
-drawings, so it works on scans. Cell text comes from OCR by default —
-see [OCR for tables](/guide/ocr).
+drawings, so it works on scans. On a page without a text layer cell text
+comes from OCR — see [OCR for tables](/guide/ocr).
 
 ```ts
 await toMarkdown(buf, { tableStrategy: "pixels" });
