@@ -8,7 +8,12 @@ import { disposable } from "../src/helpers/ocr/rapidOcr";
 import { brokenFonts, fixHomoglyphs, looksBroken } from "../src/helpers/ocr/cellText";
 import type { Block, Span } from "../src/helpers/types";
 import type { BBox } from "../src/helpers/geometry";
-import { columnLean, detectRulings, rowBreaks } from "../src/helpers/tables/pixelGrid";
+import {
+  columnLean,
+  detectRulings,
+  findPixelGrids,
+  rowBreaks,
+} from "../src/helpers/tables/pixelGrid";
 import { inkAxis, textPlausibility, upsideDown } from "../src/helpers/layout/scanOrientation";
 import { degrade, type Degradation } from "./helpers/degrade";
 
@@ -131,6 +136,27 @@ describe("detectRulings", () => {
     }
     const v = detectRulings(new PageRaster(data, W, H, 1.5)).filter((e) => e.kind === "v");
     expect(v.map((e) => Math.round(e.x))).toEqual([200]);
+  });
+
+  test("a faded column rule inside a table divides it; faint strokes elsewhere do not", () => {
+    const { data, fill } = raster();
+    fill(50, 50, 550, 52); // h rules, dark
+    fill(50, 350, 550, 352);
+    fill(50, 50, 52, 352); // outer v rules, dark
+    fill(548, 50, 550, 352);
+    fill(299, 50, 301, 350, 205); // inner v rule, faded to light grey
+    fill(420, 50, 422, 350, 205); // inner v rule, faded but for a dark piece
+    fill(420, 200, 422, 260);
+    fill(575, 60, 577, 390, 205); // a faint stroke outside the table
+    // Dark "text" lines, 8px tall and 4px apart.
+    for (let y = 56; y < 340; y += 12) fill(200, y, 290, y + 8);
+    const grids = findPixelGrids(new PageRaster(data, W, H, 1.5));
+    expect(grids.length).toBe(1);
+    const xs = [...new Set(grids[0]!.vLines.map((v) => Math.round(v.x)))].sort((a, b) => a - b);
+    expect(xs).toEqual([34, 200, 281, 366]);
+    // The completed rule runs the table's height, not just its dark piece.
+    const done = grids[0]!.vLines.filter((v) => Math.round(v.x) === 281);
+    expect(done.reduce((n, v) => n + v.y1 - v.y0, 0)).toBeGreaterThan(190);
   });
 
   test("columnLean: the lean column rules share, none when they fan out", () => {

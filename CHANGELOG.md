@@ -26,6 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crops took pieces of them (read as "|" or "[") or cut off the digit next
   to a rule. The lean is measured on the column rules and corrected only
   when they all lean alike.
+- `"pixels"` finds column rules that a scan has faded to light grey, too
+  light to count as ink (they came out as dots, and two columns were
+  merged). They are read on a lighter threshold, and count only inside a
+  table found by its dark rules and running down most of its height, so
+  light text and show-through from the back of the sheet do not make
+  tables. A faded rule also completes a rule of which only a piece was
+  dark enough to be found.
 
 ## [0.3.1] - 2026-09-28
 

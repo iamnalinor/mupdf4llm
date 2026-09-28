@@ -69,6 +69,27 @@ export function detectRulings(raster: PageRaster): DrawingEdge[] {
   return edges;
 }
 
+/**
+ * Column rules found on the {@link PageRaster.faintInk} map: a rule faded
+ * or printed thin, which a scan renders in light grey and the ink map
+ * breaks into dots. Text in light grey and show-through from the back of
+ * the sheet show up here too, so these count only inside a table (see
+ * {@link findPixelGrids}).
+ */
+function fadedColumnRules(raster: PageRaster): Seg[] {
+  const { width: w, height: h, scale } = raster;
+  const faint = raster.faintInk;
+  const gap = Math.max(2, Math.round(scale));
+  const minLen = Math.max(12, Math.round(scale * 24));
+  const maxThick = Math.max(2, scale * 4);
+  const isInk = (col: number, i: number) => col >= 0 && col < w && faint[i * w + col] === 1;
+  return scan(w, h, isInk, gap, minLen, maxThick).map((r) => ({
+    pos: raster.pageX(r.pos),
+    a: raster.pageY(r.a),
+    b: raster.pageY(r.b),
+  }));
+}
+
 /** Column rules shorter than this (pt) are too short to measure a lean on. */
 const LEAN_RULE = 72;
 /** Column rules leaning further than this (degrees) from their median do not share one lean. */
@@ -240,12 +261,40 @@ export function findPixelGrids(raster: PageRaster): RuledGrid[] {
     ),
   );
 
+  const fadedPieces = fadedColumnRules(raster);
+  const faded = joinCollinear(fadedPieces);
   const grids: RuledGrid[] = [];
   for (const group of groupColumns(vs)) {
-    const grid = gridFor(raster, group, hs, pieces);
+    const inside = fadedInside(group, faded);
+    group.push(...inside);
+    // Its pieces as found: a gap in it (a label row across the columns) stays.
+    const insidePieces = fadedPieces.filter((p) =>
+      inside.some((f) => Math.abs(f.pos - p.pos) <= ALIGN && p.a <= f.b && f.a <= p.b),
+    );
+    const grid = gridFor(raster, group, hs, [...pieces, ...insidePieces]);
     if (grid) grids.push(grid);
   }
   return grids;
+}
+
+/** A faded column rule counts when it runs down this share of its table. */
+const FADED_COVER = 0.8;
+
+/**
+ * The faded rules that divide the table of `group`: between its outer
+ * rules and running down most of its height. One next to a rule of the
+ * group completes it where only a piece was dark enough to be found.
+ */
+function fadedInside(group: Seg[], faded: Seg[]): Seg[] {
+  const xs = positions(group, MIN_COL);
+  const lo = Math.min(...group.map((v) => v.a));
+  const hi = Math.max(...group.map((v) => v.b));
+  return faded.filter(
+    (f) =>
+      f.pos > xs[0]! + MIN_COL &&
+      f.pos < xs[xs.length - 1]! - MIN_COL &&
+      Math.min(f.b, hi) - Math.max(f.a, lo) >= FADED_COVER * (hi - lo),
+  );
 }
 
 /** Merge collinear pieces (same position, small gap along). */

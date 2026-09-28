@@ -26,6 +26,8 @@ export interface OcrEngine {
 const PAD = 8;
 /** A pixel is ink when darker than this fraction of its local background. */
 const INK_RATIO = 0.7;
+/** A pixel is faint ink (a faded rule) when darker than this fraction. */
+const FAINT_RATIO = 0.9;
 /** Side of the tiles the background is estimated on (pt). */
 const BG_TILE = 24;
 
@@ -39,6 +41,8 @@ export class PageRaster {
   private readonly ox: number;
   private readonly oy: number;
   private inkMap: Uint8Array | null = null;
+  private faintMap: Uint8Array | null = null;
+  private bgTiles: { bg: Float64Array; tw: number; t: number; typical: number } | null = null;
   /** Pixels the despeckling removed from the ink (noise, specks). */
   private specks: Uint8Array | null = null;
 
@@ -76,40 +80,8 @@ export class PageRaster {
    */
   get ink(): Uint8Array {
     if (this.inkMap) return this.inkMap;
-    const { width: w, height: h, data } = this;
-    const t = Math.max(8, Math.round(BG_TILE * this.scale));
-    const tw = Math.ceil(w / t);
-    const th = Math.ceil(h / t);
-    const bg = new Float64Array(tw * th);
-    const hist = new Uint32Array(256);
-    for (let ty = 0; ty < th; ty++) {
-      for (let tx = 0; tx < tw; tx++) {
-        hist.fill(0);
-        let n = 0;
-        for (let y = ty * t; y < Math.min(h, (ty + 1) * t); y++) {
-          for (let x = tx * t; x < Math.min(w, (tx + 1) * t); x++) {
-            hist[data[y * w + x]!]!++;
-            n++;
-          }
-        }
-        let acc = 0;
-        let v = 255;
-        for (; v > 0; v--) {
-          acc += hist[v]!;
-          if (acc >= n * 0.1) break;
-        }
-        bg[ty * tw + tx] = v;
-      }
-    }
-    const sorted = Array.from(bg).sort((a, b) => a - b);
-    const typical = sorted[sorted.length >> 1] ?? 255;
-    const map = new Uint8Array(w * h);
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const b = Math.max(bg[Math.floor(y / t) * tw + Math.floor(x / t)]!, 0.8 * typical);
-        if (data[y * w + x]! < b * INK_RATIO) map[y * w + x] = 1;
-      }
-    }
+    const { width: w, height: h } = this;
+    const map = this.darker(INK_RATIO);
     // Scan noise and specks: an ink pixel with at most one inked neighbour
     // is dropped. Strokes of text and rules are several pixels wide at the
     // working resolution; on a coarse raster a pixel may be a whole stroke.
@@ -139,6 +111,65 @@ export class PageRaster {
     this.specks = specks;
     this.inkMap = clean;
     return clean;
+  }
+
+  /**
+   * 1 where a pixel is darker than FAINT_RATIO of its local background: the
+   * {@link ink} and much lighter strokes too, such as a faded or thin rule
+   * that a scan renders in light grey. Not despeckled.
+   */
+  get faintInk(): Uint8Array {
+    return (this.faintMap ??= this.darker(FAINT_RATIO));
+  }
+
+  /** 1 where a pixel is darker than `ratio` of its local background. */
+  private darker(ratio: number): Uint8Array {
+    const { width: w, height: h, data } = this;
+    const { bg, tw, t, typical } = this.background();
+    const map = new Uint8Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const b = Math.max(bg[Math.floor(y / t) * tw + Math.floor(x / t)]!, 0.8 * typical);
+        if (data[y * w + x]! < b * ratio) map[y * w + x] = 1;
+      }
+    }
+    return map;
+  }
+
+  /**
+   * The paper tone of each tile of BG_TILE points (its 90th brightness
+   * percentile), and of the page as a whole.
+   */
+  private background(): { bg: Float64Array; tw: number; t: number; typical: number } {
+    if (this.bgTiles) return this.bgTiles;
+    const { width: w, height: h, data } = this;
+    const t = Math.max(8, Math.round(BG_TILE * this.scale));
+    const tw = Math.ceil(w / t);
+    const th = Math.ceil(h / t);
+    const bg = new Float64Array(tw * th);
+    const hist = new Uint32Array(256);
+    for (let ty = 0; ty < th; ty++) {
+      for (let tx = 0; tx < tw; tx++) {
+        hist.fill(0);
+        let n = 0;
+        for (let y = ty * t; y < Math.min(h, (ty + 1) * t); y++) {
+          for (let x = tx * t; x < Math.min(w, (tx + 1) * t); x++) {
+            hist[data[y * w + x]!]!++;
+            n++;
+          }
+        }
+        let acc = 0;
+        let v = 255;
+        for (; v > 0; v--) {
+          acc += hist[v]!;
+          if (acc >= n * 0.1) break;
+        }
+        bg[ty * tw + tx] = v;
+      }
+    }
+    const sorted = Array.from(bg).sort((a, b) => a - b);
+    const typical = sorted[sorted.length >> 1] ?? 255;
+    return (this.bgTiles = { bg, tw, t, typical });
   }
 
   /**
