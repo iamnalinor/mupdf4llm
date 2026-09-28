@@ -214,8 +214,35 @@ describe("detectRulings", () => {
       }
       return columnLean(new PageRaster(data, W, H, 1.5));
     };
+    // The point: figures change nothing. The staircase of a 1.5-scale
+    // raster already reads a little under 0.5° without them.
     expect(lean(true)).toBeCloseTo(lean(false), 2);
     expect(Math.abs(lean(true) - 0.5)).toBeLessThan(0.05);
+  });
+
+  test("columnLean: a steep lean with figures flush against the rules is measured whole", () => {
+    // 300 dpi-ish, long rules leaning 2°: they drift across the first
+    // window, which then catches the edge of the figures beside them.
+    const w = 1400;
+    const h = 2900;
+    const lean = (figures: boolean, gap: number) => {
+      const data = new Uint8Array(w * h).fill(255);
+      const fill = (x0: number, y0: number, x1: number, y1: number) => {
+        for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) data[y * w + x] = 0;
+      };
+      const t = Math.tan((2 * Math.PI) / 180);
+      for (let k = 0; k < 4; k++) {
+        const at = (y: number) => Math.round(250 + k * 300 + (y - 1450) * t);
+        for (let y = 50; y < 2850; y++) fill(at(y), y, at(y) + 4, y + 1);
+        if (figures)
+          for (let y = 60; y < 2820; y += 50)
+            fill(at(y + 15) - gap - 25, y, at(y + 15) - gap, y + 30);
+      }
+      return columnLean(new PageRaster(data, w, h, 300 / 72));
+    };
+    const bare = lean(false, 0);
+    expect(Math.abs(bare - 2)).toBeLessThan(0.05);
+    for (const gap of [0, 2, 3]) expect(Math.abs(lean(true, gap) - bare)).toBeLessThan(0.02);
   });
 
   test("columnLean measures a sheared scan's true lean", async () => {

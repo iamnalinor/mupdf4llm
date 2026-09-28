@@ -115,8 +115,8 @@ const LEAN_SPREAD = 0.15;
  * but leaning columns, and deskewing it by its rows leaves the columns
  * leaning. Each rule's lean is fitted to the middle of its ink along its
  * length, twice: the second time on a narrow window along the first line,
- * so that text set flush against the rule does not pull the fit. Rules that lean differently (a curled page), or further than
- * LEAN_MAX, give 0.
+ * so that text set flush against the rule does not pull the fit. Rules
+ * that lean differently (a curled page), or further than LEAN_MAX, give 0.
  */
 export function columnLean(raster: PageRaster): number {
   const { width: w, scale } = raster;
@@ -138,12 +138,16 @@ export function columnLean(raster: PageRaster): number {
       let sxy = 0;
       for (let y = y0; y <= y1; y += step) {
         const c = Math.round(center(y));
-        // The ink in the window must be one run no wider than the stroke:
-        // a second run is a figure beside the rule, a wide one a crossing.
+        // The ink in the window must be one run no wider than the stroke,
+        // clear of the window's edges: a second run is a figure beside the
+        // rule, a wide one a crossing, and one cut by the edge may be the
+        // side of a figure while the rule has drifted out of the window.
+        const lo = Math.max(0, c - half);
+        const hi = Math.min(w - 1, c + half);
         let runs = 0;
         let a = -1;
         let b = -1;
-        for (let x = Math.max(0, c - half); x <= Math.min(w - 1, c + half); x++) {
+        for (let x = lo; x <= hi; x++) {
           if (!ink[y * w + x]) continue;
           if (x !== b + 1) {
             runs++;
@@ -152,6 +156,7 @@ export function columnLean(raster: PageRaster): number {
           b = x;
         }
         if (runs !== 1 || b - a + 1 > stroke) continue;
+        if ((a === lo && lo > 0) || (b === hi && hi < w - 1)) continue;
         const x = (a + b) / 2;
         n++;
         sy += y;
